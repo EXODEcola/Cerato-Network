@@ -18,6 +18,7 @@ Le panneau public visible sur **51.210.223.57** reste l'ancienne installation. L
 2. Une paire Ed25519 officielle gérée par un hôte de signature isolé et la clé **publique** vérifiée, épinglée localement sur le RISE-1.
 3. Une release compatible `v0.0.0` au format `visual-v1`, produite depuis une **copie contrôlée** de l'installation historique.
 4. La version du contrôleur root permettant les overlays visuels (le contrôleur actuellement installé peut ne reconnaître que les overlays complets). Une opération d'administration unique est nécessaire pour l'initialiser/mettre à jour avant la première installation Web.
+   - Le script contrôlé `scripts/upgrade-live-update-engine.sh --check` / `--install` prépare cette transition, avec sauvegarde et retour arrière en cas d'échec. **Il n'a pas encore été exécuté sur OVH.**
 
 **Ne pas présenter ces quatre conditions comme accomplies.** Aucune signature ou source de distribution ne doit être générée secrètement dans GitHub Actions : l'intégrité du canal de mise à jour exige un contrôle indépendant de la clé.
 
