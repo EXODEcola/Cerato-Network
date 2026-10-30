@@ -66,9 +66,27 @@ class LiveUpdateCenterTests(unittest.TestCase):
         self.assertIn("id=\"updates-install\"",ui)
         self.assertIn("'/api/updates/check'",ui)
         self.assertIn("'/api/updates/install'",ui)
-        self.assertIn("'{overview,ips",ui) if False else self.assertIn("settings,updates}[screen]",ui)
+        self.assertIn("settings,updates}[screen]",ui)
         with self.assertRaises(UpgradePatchError):
             patch_frontend(ui)
+
+    def test_updated_ipv4_frontend_has_different_state_but_keeps_update_center(self):
+        # The actual OVH Web script has already received the Additional IPv4
+        # patch. State may carry extra variables, but the navigation and render
+        # boundaries remain verifiable.
+        current=APP_SAMPLE.replace(
+            "let csrf='',screen='overview',live=null,logs=[],busy=false;",
+            "let csrf='',screen='overview',live=null,logs=[],busy=false,ipConfig=true;"
+        ).replace(
+            "function bind(){",
+            "function importAdditionalIPv4(){return '/api/ip/configure';}function bind(){"
+        )
+        self.assertNotIn("let csrf='',screen='overview',live=null,logs=[],busy=false;",current)
+        result=patch_frontend(current)
+        self.assertEqual(result.count("let updateInfo=null;"),1)
+        self.assertIn("'/api/ip/configure'",result)
+        self.assertIn("settings,updates}[screen]",result)
+        self.assertIn("function updates(){",result)
 
     def test_bad_layout_refused(self):
         with self.assertRaises(UpgradePatchError):
