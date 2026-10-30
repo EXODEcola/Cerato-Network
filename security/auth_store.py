@@ -404,7 +404,7 @@ class AuthStore:
             self._audit(db, "account-created", actor["id"], cur.lastrowid)
             return {"id":cur.lastrowid,"email":email,"role":role,"active":True}
 
-    def manage_account(self, actor: dict, target_id: int, *, email=None, role=None, active=None, new_password=None):
+    def manage_account(self, actor: dict, target_id: int, *, email=None, role=None, active=None, new_password=None, reset_mfa=False):
         self.require_permission(actor, "accounts_manage")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -426,11 +426,19 @@ class AuthStore:
                 values["active"] = int(active)
             if new_password is not None:
                 values["passhash"] = HASHER.hash(validate_password(new_password))
-            if not values:
+            if not isinstance(reset_mfa, bool):
+                raise AuthError("Paramètre 2FA invalide.")
+            if not values and not reset_mfa:
                 return _public(target)
-            columns = ",".join(k+"=?" for k in values)
-            db.execute("UPDATE accounts SET "+columns+" WHERE id=?", (*values.values(),target_id))
-            if "passhash" in values or values.get("active") == 0 or "role" in values or "email" in values:
+            if values:
+                columns = ",".join(k+"=?" for k in values)
+                db.execute("UPDATE accounts SET "+columns+" WHERE id=?", (*values.values(),target_id))
+            if reset_mfa:
+                db.execute("DELETE FROM mfa_challenges WHERE account_id=?", (target_id,))
+                db.execute("DELETE FROM mfa_recovery WHERE account_id=?", (target_id,))
+                db.execute("DELETE FROM mfa WHERE account_id=?", (target_id,))
+                self._audit(db, "coadmin-mfa-reset", actor["id"], target_id)
+            if reset_mfa or "passhash" in values or values.get("active") == 0 or "role" in values or "email" in values:
                 db.execute("DELETE FROM sessions WHERE account_id=?", (target_id,))
             self._audit(db, "account-managed", actor["id"], target_id)
             return _public(db.execute("SELECT * FROM accounts WHERE id=?", (target_id,)).fetchone())
