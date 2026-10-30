@@ -127,7 +127,7 @@ if [[ "$WG_BIN" != "/usr/bin/wg" && "$WG_BIN" != "/usr/sbin/wg" ]]; then
   echo "REFUS : binaire WireGuard inattendu. Vérifier son emplacement." >&2; exit 1
 fi
 if ! id "$USER_NAME" >/dev/null 2>&1; then
-  useradd --system --home "$DATA" --shell /usr/sbin/nologin "$USER_NAME"
+  useradd --system --user-group --home "$DATA" --shell /usr/sbin/nologin "$USER_NAME"
 fi
 install -d -o "$USER_NAME" -g "$USER_NAME" -m 0700 "$DATA"
 install -d -o root -g root -m 0755 "$BASE" "$RELEASES"
