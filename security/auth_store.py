@@ -200,6 +200,7 @@ class AuthStore:
                 for k in keys:
                     self._failed(db, k, now)
                 self._audit(db, "login-rejected")
+                db.commit()  # Persist rate-limit counters before returning a generic error.
                 raise InvalidCredentials("Identifiants incorrects ou accès temporairement limité.")
             for k in keys:
                 db.execute("DELETE FROM failed_logins WHERE key=?", (k,))
@@ -322,6 +323,19 @@ class AuthStore:
             return _public(db.execute("SELECT * FROM accounts WHERE id=?", (actor["id"],)).fetchone())
 
 
+def _safe_handshake(value):
+    try:
+        stamp = int(value)
+        return stamp if stamp > 0 else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _recent_handshake(value):
+    stamp = _safe_handshake(value)
+    return bool(stamp and 0 <= int(time.time()) - stamp < 180)
+
+
 def viewer_projection(status: dict) -> dict:
     """Explicit allow-list. NEVER pass through whole backend status to a viewer."""
     peers = status.get("peers") or {}
@@ -331,8 +345,8 @@ def viewer_projection(status: dict) -> dict:
             continue
         items.append({
             "name": str(name)[:80],
-            "connected": bool(peer.get("last_handshake") and int(time.time())-int(peer["last_handshake"]) < 180),
-            "last_handshake": peer.get("last_handshake") or None,
+            "connected": _recent_handshake(peer.get("last_handshake")),
+            "last_handshake": _safe_handshake(peer.get("last_handshake")),
         })
     return {
         "dashboard_mode": status.get("dashboard_mode"),
