@@ -230,8 +230,12 @@ def check():
     state["state"]="downloaded"
     _save(state)
     try:
-        _candidate(state,key)
-        state["last_result"]="Release signée et compatible préparée"
+        candidate=_candidate(state,key)
+        state["last_result"]=(
+            "Release signée et compatible préparée"
+            if candidate is not None else
+            "Release signée mais non compatible avec le panneau actuel"
+        )
     except (UpdateError,ValueError,zipfile.BadZipFile):
         state["last_result"]="Release signée mais non compatible avec le panneau actuel"
     _save(state)
