@@ -45,6 +45,8 @@ ALLOWED={
 }
 OVERLAY="cerato-network/live-overlay/"
 SCHEMA="cerato-network-legacy-web-overlay-v1"
+VISUAL_SCHEMA="cerato-network-legacy-web-visual-v1"
+VISUAL_FILES={"web/app.js","web/style.css"}
 
 
 class UpdateError(RuntimeError):
@@ -132,22 +134,25 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             raise UpdateError("Release non compatible avec le panneau RISE-1 actuel")
         spec=json.loads(z.read(marker))
         if (not isinstance(spec,dict) or
-            spec.get("schema")!=SCHEMA or
+            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA) or
             spec.get("target")!="cerato-network-web-8787" or
             not isinstance(spec.get("from_versions"),list) or
             installed_version not in spec["from_versions"]):
             raise UpdateError("Migration de cette version non autorisée")
+        required=set(ALLOWED) if spec["schema"]==SCHEMA else VISUAL_FILES
+        # The only allowed update payloads are the known full legacy overlay or
+        # a style+JS update. A visual refresh never redistributes server.py.
         found={name.removeprefix(OVERLAY) for name in z.namelist()
                if name.startswith(OVERLAY) and name!=marker}
-        if found!=set(ALLOWED):
-            raise UpdateError("La release ne contient pas les trois fichiers Web attendus")
-        for name in ALLOWED:
+        if found!=required:
+            raise UpdateError("Contenu de release Web inattendu")
+        for name in required:
             info=z.getinfo(OVERLAY+name)
-            if info.file_size>2_000_000:
-                raise UpdateError("Fichier de mise à jour trop volumineux")
+            if info.file_size<=0 or info.file_size>2_000_000:
+                raise UpdateError("Fichier de mise à jour hors limites")
         if verify_only:
             return None
-        return {name:z.read(OVERLAY+name) for name in ALLOWED}
+        return {name:z.read(OVERLAY+name) for name in sorted(required)}
 
 
 def _snapshot():
@@ -165,7 +170,10 @@ def _snapshot():
 
 
 def _replace(files):
-    for rel,source in ALLOWED.items():
+    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES):
+        raise UpdateError("Liste de fichiers Web non autorisée")
+    for rel in sorted(files):
+        source=ALLOWED[rel]
         if source.is_symlink() or not source.is_file():
             raise UpdateError("Fichier Web inattendu : "+rel)
         fd,path=tempfile.mkstemp(prefix=".cerato-new-",dir=source.parent)
@@ -312,10 +320,12 @@ def apply():
             dest=Path(folder)/name
             dest.parent.mkdir(parents=True,exist_ok=True)
             dest.write_bytes(data)
-        _cmd(sys.executable,"-m","py_compile",str(Path(folder)/"backend/server.py"))
-        if not shutil.which("node"):
-            raise UpdateError("Node.js requis pour la validation du JavaScript")
-        _cmd("node","--check",str(Path(folder)/"web/app.js"))
+        if "backend/server.py" in files:
+            _cmd(sys.executable,"-m","py_compile",str(Path(folder)/"backend/server.py"))
+        if "web/app.js" in files:
+            if not shutil.which("node"):
+                raise UpdateError("Node.js requis pour la validation du JavaScript")
+            _cmd("node","--check",str(Path(folder)/"web/app.js"))
     if not _web_ok():
         raise UpdateError("Le panneau existant est déjà en défaut")
     previous_network=_network_fingerprint()
