@@ -6,6 +6,7 @@ port. Network modifications and agent update API are intentionally disabled
 until the legacy ceratoctl adapter and two-factor authentication are audited.
 """
 from __future__ import annotations
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -139,6 +140,23 @@ class Handler(BaseHTTPRequestHandler):
         expected = urlsplit(ORIGIN).netloc.lower()
         return host in {expected, "127.0.0.1:%d" % PORT, "localhost:%d" % PORT}
 
+    def remote_ip(self):
+        """Use only Nginx-overwritten X-Real-IP from a trusted local proxy.
+
+        NEVER trust X-Forwarded-For supplied by the browser; without explicit
+        opt-in, treat the loopback proxy as the source and limit per account.
+        """
+        source=self.client_address[0]
+        if (os.environ.get("CERATO_TRUST_LOCAL_PROXY") == "1" and
+            source in ("127.0.0.1","::1")):
+            header=self.headers.get("X-Real-IP","")
+            if len(header) <= 64:
+                try:
+                    return str(ipaddress.ip_address(header))
+                except ValueError:
+                    pass
+        return source
+
     def token(self):
         try:
             jar = cookies.SimpleCookie()
@@ -247,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(201, {"account": account})
             if method == "POST" and path == "/api/auth/login":
                 session = STORE.login(body.get("email"), body.get("password"),
-                                      self.client_address[0])
+                                      self.remote_ip())
                 if session.get("mfa_required"):
                     return self.json(200, session)
                 token = session.pop("session")
