@@ -27,7 +27,7 @@ def live_update(*args):
     except (OSError,subprocess.TimeoutExpired):
         raise UserError('Service de mises à jour indisponible.')
     if result.returncode:
-        raise UserError('Échec de vérification de la release signée. Voir le journal du service.')
+        raise UserError('Centre de mises à jour indisponible. Vérifier le service de contrôle.')
     return json.loads(result.stdout)
 
 def launch_signed_update():
@@ -91,25 +91,58 @@ def patch_backend(source:str)->str:
 UPDATES_JS=r"""
 function updates(){
   const u=updateInfo||{};
-  const current=esc(u.installed_version||'Version historique');
-  const available=esc(u.available_version||'Aucune release');
-  const channel=esc(u.channel||'Non configuré');
-  const report=esc(u.last_result||'Aucune vérification récente.');
-  return title('Mises à jour','Releases Cerato Network signées, préparées sur le VPS de build.', '<button class="btn2" id="updates-check">Rechercher une mise à jour</button>')+
-    '<div class="infobox">Le moteur WireGuard, les adresses OVH et les publications NAT restent gérés séparément. Seules les releases compatibles avec le panneau existant peuvent être installées.</div>'+
-    '<div class="metrics"><div class="metric"><small>Version installée</small><strong>'+current+'</strong></div>'+
-    '<div class="metric"><small>Version disponible</small><strong>'+available+'</strong></div>'+
-    '<div class="metric"><small>Canal</small><strong>'+channel+'</strong></div></div>'+
-    '<section class="section"><h2>Distribution signée et installation</h2><p class="screen-sub">'+report+'</p>'+
-    '<div class="rowline"><span class="status '+(u.configured?'':'pending')+'">'+(u.configured?'Source de mises à jour configurée':'Distribution non configurée')+'</span>'+
-    '<span class="status '+(u.installable?'':'pending')+'">'+(u.installable?'Release signée et compatible':'Aucune installation autorisée')+'</span></div>'+
-    '<div class="rowline" style="margin-top:18px"><button class="btn2 primary" id="updates-install" '+(u.installable?'':'disabled')+'>Installer et vérifier la mise à jour</button></div>'+
-    '<p class="muted-note">Installation : sauvegarde des fichiers Web, vérification de la signature Ed25519, contrôle du service sur 8787 et restauration en cas d’échec. Une version incompatible est refusée.</p></section>'+
-    '<section class="section"><h2>Historique</h2>'+table(['Version','Date','Sauvegarde'],(u.history||[]).slice().reverse().map(x=>
-      '<tr><td>'+esc(x.version)+'</td><td>'+new Date((x.time||0)*1000).toLocaleString('fr-FR')+'</td><td>'+esc(x.snapshot)+'</td></tr>').join(''))+'</section>';
+  const configured=Boolean(u.configured);
+  const ready=Boolean(configured&&u.installable);
+  const version=esc(u.installed_version||'Installation historique');
+  const available=esc(u.available_version||'Aucune');
+  const channel=esc(u.channel==='beta'?'Bêta':u.channel==='stable'?'Stable':'Non défini');
+  const checkTime=u.last_checked_at?new Date(u.last_checked_at*1000).toLocaleString('fr-FR'):'Jamais';
+  const reason=u.reason_code||'';
+  const statusText=ready?'Prête à installer':
+    !configured?'Distribution à configurer':
+    reason==='already_current'?'À jour':
+    reason==='release_not_compatible'?'Version incompatible':
+    reason==='release_check_failed'?'Vérification échouée':
+    'Aucune installation disponible';
+  const stateClass=ready?'ok':reason==='release_check_failed'?'error':configured?'neutral':'warning';
+  const description=!configured
+    ?'Le serveur ne dispose pas encore d’une source HTTPS officielle et de sa clé de vérification. La configuration initiale se fait une seule fois par un administrateur système.'
+    :(u.last_result||'La vérification des mises à jour n’a pas encore été effectuée.');
+  const history=(u.history||[]).slice(-8).reverse().map(x=>
+    '<tr><td>'+esc(x.version||'-')+'</td><td>'+
+    (x.time?new Date(x.time*1000).toLocaleString('fr-FR'):'-')+
+    '</td><td>'+esc(x.snapshot?'Disponible':'Non remontée')+'</td></tr>').join('');
+  return '<div class="cerato-updates">'+
+    '<div class="cerato-update-header">'+
+      '<div><div class="cerato-eyebrow">SYSTÈME / MAINTENANCE</div>'+
+      '<h2>Mises à jour</h2><p>Versions compatibles et distribution signée Cerato Network.</p></div>'+
+      '<div class="cerato-update-actions"><button class="btn2" id="updates-check" '+
+      (configured?'':'disabled')+'>Rechercher une mise à jour</button></div></div>'+
+    '<div class="cerato-update-summary">'+
+      '<div><small>Version installée</small><strong>'+version+'</strong></div>'+
+      '<div><small>Version disponible</small><strong>'+available+'</strong></div>'+
+      '<div><small>Canal</small><strong>'+channel+'</strong></div>'+
+      '<div><small>Dernière vérification</small><strong>'+esc(checkTime)+'</strong></div></div>'+
+    '<div class="cerato-update-panel">'+
+      '<div class="cerato-update-panel-head"><h3>Distribution et intégrité</h3>'+
+      '<span class="cerato-update-state '+stateClass+'">'+esc(statusText)+'</span></div>'+
+      '<p class="cerato-update-description">'+esc(description)+'</p>'+
+      '<div class="cerato-update-facts">'+
+        '<span><b>Source HTTPS</b><em>'+ (configured?'Configurée':'Non configurée') +'</em></span>'+
+        '<span><b>Signature</b><em>Ed25519 obligatoire</em></span>'+
+        '<span><b>Compatibilité</b><em>Console RISE-1 / 8787</em></span></div>'+
+      '<div class="cerato-update-install">'+
+        '<button class="btn2 primary" id="updates-install" '+(ready?'':'disabled')+
+        '>Installer la version vérifiée</button>'+
+        '<span>Une installation conserve les configurations réseau et sauvegarde la version Web précédente.</span></div>'+
+    '</div>'+
+    '<div class="cerato-update-panel"><div class="cerato-update-panel-head">'+
+      '<h3>Historique des installations</h3></div>'+
+      table(['Version','Date','Sauvegarde'],history)+
+      (!history?'<p class="cerato-update-description">Aucune mise à jour enregistrée.</p>':'')+
+    '</div></div>';
 }
 """
-
 
 def patch_frontend(source:str)->str:
     if "function updates(){" in source or "['updates','Mises à jour'" in source:
