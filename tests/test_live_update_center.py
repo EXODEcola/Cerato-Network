@@ -173,6 +173,17 @@ class LiveUpdateCenterTests(unittest.TestCase):
             with self.assertRaises(ctl.UpdateError):
                 ctl._read_overlay(other,"v0.0.0")
 
+    def test_missing_distribution_is_not_signature_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            with patch.object(ctl,"STORE",root),patch.object(ctl,"STATE",root/"state.json"),\\
+                 patch.object(ctl,"SETTING",root/"missing.json"):
+                result=ctl.check()
+                self.assertFalse(result["configured"])
+                self.assertFalse(result["installable"])
+                self.assertEqual(result["status"],"unconfigured")
+                self.assertIn("source HTTPS",result["last_result"])
+
     def test_no_distribution_is_not_installable(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
