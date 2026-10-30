@@ -44,4 +44,4 @@ python security/cli.py --database "$CERATO_AUTH_DB" bootstrap-token
 printf '\nDémarrage : http://127.0.0.1:8788 (sur la VM uniquement)\n'
 printf 'Depuis ton PC, utilise un tunnel SSH vers cette VM pour ouvrir le port.\n'
 printf 'Ctrl+C arrête la démonstration et efface sa base et sa clé MFA temporaire.\n\n'
-exec python gateway/http_api.py
+python gateway/http_api.py
