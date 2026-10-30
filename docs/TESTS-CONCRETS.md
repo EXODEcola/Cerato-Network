@@ -49,6 +49,39 @@ L'exécution doit se faire sous le compte **cerato**, pas root, sur **CERATO-BUI
 
 Ne pas activer la production simplement parce que ces tests passent.
 
+## Niveau A bis : tester le vrai formulaire depuis ton navigateur
+
+Pour vérifier réellement la nouvelle page d'authentification, les comptes, les restrictions et le double facteur, un service de démonstration sur localhost est prévu. Il ne touche pas le vrai backend Cerato ni ses identifiants, et utilise une base temporaire automatiquement effacée à l'arrêt.
+
+Sur **CERATO-BUILD-01**, dans un terminal SSH interactif :
+
+~~~bash
+cd ~/Cerato-Network
+bash scripts/demo-login.sh
+~~~
+
+Le terminal affiche un **code initial à usage unique** valable 15 minutes, puis démarre le serveur de développement uniquement sur **127.0.0.1:8788**. Ne pas exposer ce port à Internet et ne pas créer de règle NAT pour lui.
+
+Depuis **Windows PowerShell**, sur ton PC personnel (pas dans le terminal Ubuntu), ouvre un deuxième terminal :
+
+~~~powershell
+ssh -N -L 8788:127.0.0.1:8788 cerato@IP_OU_DNS_DE_CERATO_BUILD_01
+~~~
+
+Remplace IP_OU_DNS_DE_CERATO_BUILD_01 par l'adresse de ta VM de build (celle que tu utilises déjà pour SSH). Sur ton navigateur Windows, ouvre ensuite :
+
+**http://127.0.0.1:8788**
+
+Créer un compte propriétaire **de test** : adresse e-mail de démonstration, mot de passe unique (pas le vrai identifiant OVH), code initial affiché par le premier terminal. Configurer le TOTP de test avec une application d'authentification, puis vérifier les comportements :
+
+- Le propriétaire peut créer des administrateurs et des utilisateurs.
+- Un administrateur peut gérer d'autres comptes mais **pas le propriétaire**.
+- L'utilisateur simple ne voit pas les secrets et ne dispose pas de commandes de configuration.
+- Fermer/reconnecter la session, essayer un mauvais code TOTP, vérifier les protections et la déconnexion.
+- Vérifier que le centre de mises à jour de développement n'autorise pas d'installation réseau.
+
+L'application utilise volontairement **HTTP dans le tunnel SSH chiffré** ; ce mode de développement n'est pas une configuration HTTPS de production. Fermer le tunnel SSH et arrêter `demo-login.sh` avec Ctrl+C après le test : la base et sa clé MFA temporaires sont supprimées.
+
 ## Niveau B : diagnostic UDP réel entre deux machines
 
 Lorsqu'on est prêt à tester le trajet IP réel, il faut **deux terminaux distincts** et une capture de paquets sur le RISE-1. Le diagnostic reste non destructif.
