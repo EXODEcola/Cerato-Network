@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "security"))
 from auth_store import AuthStore, AuthError, Forbidden, InvalidCredentials, secure_cookie, viewer_projection
 from access_policy import authorize, required_permission
+sys.path.insert(0, str(ROOT / 'updates'))
+from catalog import configured_info
 
 BIND = "127.0.0.1"
 PORT = int(os.environ.get("CERATO_PORT", "8788"))
@@ -209,6 +211,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, raw if actor["role"] != "user" else viewer_projection(raw))
             if path == "/api/accounts":
                 return self.json(200, {"accounts": STORE.list_accounts(actor)})
+            if path == "/api/updates":
+                return self.json(200, configured_info())
             return self.error(501, "Fonction non disponible dans cette version.")
         except Forbidden:
             return self.error(403, "Accès refusé.")
@@ -256,6 +260,8 @@ class Handler(BaseHTTPRequestHandler):
                     payload["recovery_codes"] = session["recovery_codes"]
                 return self.json(200, payload, cookie=self.session_cookie(token))
             actor = self.actor(method, path)
+            if method == "POST" and path == "/api/updates/check":
+                return self.json(200, configured_info())
             if method == "POST" and path == "/api/auth/logout":
                 STORE.logout(self.token())
                 return self.json(200, {"ok": True},
