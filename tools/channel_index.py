@@ -67,8 +67,19 @@ def create_channel(release_dir: Path, channel: str, output: Path,
         old_raw=dest.read_bytes()
         verify_signature(old_raw,sigdest.read_bytes(),Path(public_key))
         old=json.loads(old_raw)
-        if old.get("channel")!=channel or _parse_version(old["version"])>=_parse_version(version):
-            raise PackageError("Régression ou index identique interdits")
+        if old.get("channel")!=channel:
+            raise PackageError("Canal de l'ancien index incohérent")
+        old_version=_parse_version(old["version"])
+        new_version=_parse_version(version)
+        if old_version>new_version:
+            raise PackageError("Régression de version interdite")
+        if old_version==new_version:
+            # Index validity is short-lived. Refreshing the same signed
+            # release must be possible, but never with another artifact.
+            if (old.get("manifest_sha256")!=pointer["manifest_sha256"] or
+                type(old.get("issued_at")) is not int or
+                pointer["issued_at"]<=old["issued_at"]):
+                raise PackageError("Même version, contenu différent ou date non croissante")
     with tempfile.TemporaryDirectory(prefix=".channel-",dir=output) as td:
         tmp=Path(td)
         (tmp/"pointer").write_bytes(raw)
