@@ -198,6 +198,32 @@ def restore():
     return {"restored":len(state["local_ipv4"])}
 
 
+def adopt_existing_pool():
+    """Persist ONLY already configured /32 aliases currently in Cerato pool.
+
+    No new IP is added at runtime. This is used during migration to protect
+    existing OVH Additional IPv4 assignments against loss on next reboot.
+    """
+    cfg=read_config()
+    wan,primary=effective_wan(cfg)
+    observed=listed(wan)
+    state=state_read()
+    known={item["ip"] for item in state["local_ipv4"]}
+    added=[]
+    for address in cfg["pool"]:
+        ip=validate_public(address)
+        if ip==primary:
+            raise IPError("IPv4 principale découverte dans le pool; migration refusée")
+        if ip not in known and ip in observed:
+            state["local_ipv4"].append({"ip":ip,"wan":wan,"preexisting":True})
+            known.add(ip)
+            added.append(ip)
+    if added:
+        save(state)
+    return {"adopted":added,"wan":wan,
+            "ignored_absent":sorted(set(cfg["pool"])-observed)}
+
+
 def remove_local(ip):
     cfg,wan,address,primary=preflight(ip)
     if address in cfg["pool"]:
@@ -227,6 +253,7 @@ def main():
     sub=parser.add_subparsers(dest="action",required=True)
     sub.add_parser("status")
     sub.add_parser("restore")
+    sub.add_parser("adopt-existing-pool")
     p=sub.add_parser("preview");p.add_argument("ip");p.add_argument("--mode",default="local-nat")
     a=sub.add_parser("import-local");a.add_argument("ip")
     d=sub.add_parser("remove-local");d.add_argument("ip")
@@ -240,6 +267,7 @@ def main():
         if args.action=="status":result=status()
         elif args.action=="preview":result=preview(args.ip,args.mode)
         elif args.action=="restore":result=restore()
+        elif args.action=="adopt-existing-pool":result=adopt_existing_pool()
         elif args.action=="import-local":result=import_local(args.ip)
         else:result=remove_local(args.ip)
     except (IPError,OSError,ValueError,KeyError,TypeError) as exc:
