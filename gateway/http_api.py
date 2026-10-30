@@ -22,6 +22,7 @@ from auth_store import AuthStore, AuthError, Forbidden, InvalidCredentials, secu
 from access_policy import authorize, required_permission
 sys.path.insert(0, str(ROOT / 'updates'))
 from catalog import configured_info
+from installer import stage as stage_signed_release, StageError
 
 BIND = "127.0.0.1"
 PORT = int(os.environ.get("CERATO_PORT", "8788"))
@@ -212,7 +213,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/accounts":
                 return self.json(200, {"accounts": STORE.list_accounts(actor)})
             if path == "/api/updates":
-                return self.json(200, configured_info())
+                catalog = configured_info()
+                catalog["staging_enabled"] = os.environ.get("CERATO_DEV_STAGE_ENABLED") == "1"
+                return self.json(200, catalog)
             return self.error(501, "Fonction non disponible dans cette version.")
         except Forbidden:
             return self.error(403, "Accès refusé.")
@@ -261,7 +264,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, payload, cookie=self.session_cookie(token))
             actor = self.actor(method, path)
             if method == "POST" and path == "/api/updates/check":
-                return self.json(200, configured_info())
+                catalog = configured_info()
+                catalog["staging_enabled"] = os.environ.get("CERATO_DEV_STAGE_ENABLED") == "1"
+                return self.json(200, catalog)
+            if method == "POST" and path == "/api/updates/stage":
+                if os.environ.get("CERATO_DEV_STAGE_ENABLED") != "1":
+                    return self.error(403, "Préparation de releases désactivée.")
+                catalog = configured_info()
+                if not catalog.get("verified"):
+                    return self.error(422, "Aucune release signée vérifiée.")
+                release_dir = os.environ.get("CERATO_RELEASE_DIR", "")
+                public_key = os.environ.get("CERATO_RELEASE_PUBKEY", "")
+                staging_root = os.environ.get("CERATO_DEV_STAGE_ROOT", "")
+                if not release_dir or not public_key or not staging_root:
+                    return self.error(422, "Répertoires de test non configurés.")
+                info = stage_signed_release(Path(release_dir), Path(public_key), Path(staging_root))
+                return self.json(200, info)
             if method == "POST" and path == "/api/auth/logout":
                 STORE.logout(self.token())
                 return self.json(200, {"ok": True},
@@ -294,8 +312,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.error(401, "Identifiants incorrects ou session expirée.")
         except Forbidden:
             return self.error(403, "Accès refusé.")
-        except (AuthError, ValueError, TypeError):
-            return self.error(422, "Valeur invalide.")
+        except (AuthError, ValueError, TypeError, StageError):
+            return self.error(422, "Valeur invalide ou release refusée.")
         except Exception:
             self.log_error("Erreur interne masquée")
             return self.error(500, "Erreur interne.")
