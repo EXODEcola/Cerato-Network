@@ -13,6 +13,7 @@ import re
 import secrets
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from argon2 import PasswordHasher
@@ -70,12 +71,20 @@ class AuthStore:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._init()
 
+    @contextmanager
     def _db(self):
         connection = sqlite3.connect(self.path, timeout=8)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=8000")
-        return connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA busy_timeout=8000")
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _init(self):
         # The service account must own this directory. Never expose it from Nginx.
@@ -292,7 +301,7 @@ class AuthStore:
                 return _public(target)
             columns = ",".join(k+"=?" for k in values)
             db.execute("UPDATE accounts SET "+columns+" WHERE id=?", (*values.values(),target_id))
-            if "passhash" in values or values.get("active") == 0 or "role" in values:
+            if "passhash" in values or values.get("active") == 0 or "role" in values or "email" in values:
                 db.execute("DELETE FROM sessions WHERE account_id=?", (target_id,))
             self._audit(db, "account-managed", actor["id"], target_id)
             return _public(db.execute("SELECT * FROM accounts WHERE id=?", (target_id,)).fetchone())
