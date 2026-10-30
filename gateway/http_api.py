@@ -241,10 +241,20 @@ class Handler(BaseHTTPRequestHandler):
             if method == "POST" and path == "/api/auth/login":
                 session = STORE.login(body.get("email"), body.get("password"),
                                       self.client_address[0])
+                if session.get("mfa_required"):
+                    return self.json(200, session)
                 token = session.pop("session")
                 csrf = session.pop("csrf")
                 return self.json(200, {"account": session["account"], "csrf": csrf},
                                  cookie=self.session_cookie(token))
+            if method == "POST" and path == "/api/auth/mfa/verify":
+                session = STORE.complete_mfa(body.get("challenge"), body.get("code"))
+                token = session.pop("session")
+                csrf = session.pop("csrf")
+                payload = {"account": session["account"], "csrf": csrf}
+                if "recovery_codes" in session:
+                    payload["recovery_codes"] = session["recovery_codes"]
+                return self.json(200, payload, cookie=self.session_cookie(token))
             actor = self.actor(method, path)
             if method == "POST" and path == "/api/auth/logout":
                 STORE.logout(self.token())
