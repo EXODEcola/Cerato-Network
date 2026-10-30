@@ -106,7 +106,7 @@ Changer la clé publique ou l'URL officielle nécessite une procédure de rotati
 - Le gestionnaire actuel vérifie les signatures et la compatibilité, mais les tests d'installation Web E2E sur le RISE-1 restent à réaliser.
 - Une coupure électrique pendant l'écriture de plusieurs fichiers Web ne bénéficie pas encore d'un watchdog post-redémarrage système indépendant ; **ne pas déclarer le système de rollback résilient aux crashs tant qu'il n'est pas testé**.
 - La migration vers la nouvelle interface et vers l'authentification owner/admin/user, Argon2id et 2FA nécessite un **overlay de migration dédié** ; ce lot ne remplace pas encore l'ancienne authentification. Les futurs overlays pourront apporter ces fonctionnalités progressivement.
-- Le système de mise à jour des agents Dell/Windows et l'assignation automatique d'IP routée ne sont pas encore opérationnels.
+- Le système de mise à jour des agents Dell/Ubuntu 24.04 et l'assignation automatique d'IP routée ne sont pas encore opérationnels.
 - Le contrôle de santé Web et la comparaison des configurations réseau ne remplacent pas des tests end-to-end NAT/UDP.
 
 ## 7. Publier un port vers le Dell R530
