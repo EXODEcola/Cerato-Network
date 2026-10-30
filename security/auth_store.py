@@ -243,6 +243,28 @@ class AuthStore:
             if not row or not isinstance(csrf_token, str) or not hmac.compare_digest(row["csrfhash"], _digest(csrf_token)):
                 raise Forbidden("Jeton anti-CSRF invalide.")
 
+    def rotate_csrf(self, session_token: str) -> str:
+        # Renew a CSRF token from an authenticated, unexpired session.
+        self.actor(session_token)
+        csrf = secrets.token_urlsafe(32)
+        with self._db() as db:
+            db.execute("UPDATE sessions SET csrfhash=? WHERE tokenhash=? AND expires_at>?",
+                       (_digest(csrf), _digest(session_token), int(time.time())))
+        return csrf
+
+    def delete_account(self, actor: dict, target_id: int):
+        self.require_permission(actor, "accounts_manage")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            target = db.execute("SELECT id,role FROM accounts WHERE id=?", (target_id,)).fetchone()
+            if not target:
+                raise AuthError("Compte inconnu.")
+            if target["role"] == "owner" or target["id"] == actor["id"]:
+                raise Forbidden("Suppression de ce compte interdite.")
+            db.execute("DELETE FROM sessions WHERE account_id=?", (target_id,))
+            db.execute("DELETE FROM accounts WHERE id=?", (target_id,))
+            self._audit(db, "account-deleted", actor["id"], target_id)
+
     def logout(self, token: str):
         with self._db() as db:
             db.execute("DELETE FROM sessions WHERE tokenhash=?", (_digest(token),))
