@@ -173,7 +173,7 @@ def import_local(ip):
     try:
         if address not in listed(wan):
             raise IPError("Additional IPv4 non présente après attribution")
-        state["local_ipv4"].append({"ip":address,"wan":wan})
+        state["local_ipv4"].append({"ip":address,"wan":wan,"preexisting":present})
         save(state)
     except Exception:
         if not present:
@@ -207,13 +207,14 @@ def remove_local(ip):
     state=state_read()
     if not any(x["ip"]==address for x in state["local_ipv4"]):
         raise IPError("Cette IP n'est pas gérée par Cerato")
+    preexisting=next(x.get("preexisting",False) for x in state["local_ipv4"] if x["ip"]==address)
     state["local_ipv4"]=[x for x in state["local_ipv4"] if x["ip"]!=address]
-    # Persist the removal first, then remove only the managed /32 alias,
-    # never modify any gateway route, peer or the primary IP.
+    # Never delete an alias that was already present before Cerato started
+    # managing its persistence. External ownership must be respected.
     old=state_read()
     save(state)
     try:
-        if address in listed(wan):
+        if not preexisting and address in listed(wan):
             run("ip","-4","address","del",address+"/32","dev",wan)
     except Exception:
         save(old)
