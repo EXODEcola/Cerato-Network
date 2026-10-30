@@ -10,7 +10,7 @@ if [[ "${EUID}" -eq 0 ]]; then
   exit 1
 fi
 python3 --version
-python3 -m compileall -q security gateway network updates tools tests
+python3 -m compileall -q security gateway network updates tools tests integrations integration
 for script in scripts/*.sh; do
   bash -n "$script"
 done
