@@ -85,7 +85,7 @@ class LiveUpdateCenterTests(unittest.TestCase):
         )
         self.assertNotIn("let csrf='',screen='overview',live=null,logs=[],busy=false;",current)
         result=patch_frontend(current)
-        self.assertEqual(result.count("let updateInfo=null;"),1)
+        self.assertEqual(result.count("let updateInfo=null,updateLoading=false;"),1)
         self.assertIn("'/api/ip/configure'",result)
         self.assertIn("settings}[screen]",result)
         self.assertIn("if(screen==='updates')",result)
@@ -125,7 +125,7 @@ class LiveUpdateCenterTests(unittest.TestCase):
                 with self.subTest(variant=index):
                     generated=patch_frontend(original)
                     self.assertNotIn("\\\\nfunction updates()",generated)
-                    self.assertIn("\\nfunction updates()",generated)
+                    self.assertIn("\nfunction updates()",generated)
                     output=Path(folder)/f"generated-{index}.js"
                     output.write_text(generated,encoding="utf8")
                     checked=subprocess.run(
