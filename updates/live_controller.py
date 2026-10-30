@@ -234,7 +234,7 @@ def status():
         answer["status"]="unconfigured"
         answer["reason_code"]="source_not_configured"
         answer["available_version"]=None
-        answer["last_result"]="La distribution signée n'est pas encore configurée sur cette passerelle."
+        answer["last_result"]="La source HTTPS de distribution signée n'est pas encore configurée sur cette passerelle."
         return answer
     answer["configured"]=True
     answer["can_check"]=True
