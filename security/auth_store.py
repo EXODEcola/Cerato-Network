@@ -157,7 +157,6 @@ class AuthStore:
         password = validate_password(password)
         if not isinstance(token, str) or len(token) > 256:
             raise InvalidCredentials("Code d'initialisation invalide ou expiré.")
-        password_hash = HASHER.hash(password)
         now = int(time.time())
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -166,6 +165,9 @@ class AuthStore:
             row = db.execute("SELECT tokenhash,expires_at FROM bootstrap WHERE singleton=1").fetchone()
             if not row or row["expires_at"] < now or not hmac.compare_digest(row["tokenhash"], _digest(token)):
                 raise InvalidCredentials("Code d'initialisation invalide ou expiré.")
+            # Only perform expensive Argon2id work AFTER validating the one-time
+            # host-secret; otherwise anonymous setup calls are a CPU/memory DoS.
+            password_hash = HASHER.hash(password)
             cur = db.execute(
                 "INSERT INTO accounts(email,passhash,role,active,created_at) VALUES(?,?,'owner',1,?)",
                 (email, password_hash, now),
@@ -224,7 +226,7 @@ class AuthStore:
                     "account": _public(row)}
 
     def actor(self, session_token: str) -> dict:
-        if not isinstance(session_token, str) or not session_token:
+        if not isinstance(session_token, str) or not (20 <= len(session_token) <= 256):
             raise InvalidCredentials("Session absente.")
         with self._db() as db:
             row = db.execute(
