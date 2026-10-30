@@ -137,14 +137,19 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaises(DistributionError):
             check_channel(BASE,"stable",self.pub,transport=self.transport,now=self.now+5000)
 
-    def test_channel_publisher_refuses_rollback(self):
+    def test_channel_publisher_refreshes_identical_release_but_not_rollback(self):
+        refreshed=create_channel(self.packed,"stable",self.channels,self.key,self.pub,
+                                 issued_at=self.now+60,validity_seconds=3600)
+        self.assertEqual(refreshed["version"],"v1.2.0")
+        self.assertEqual(refreshed["issued_at"],self.now+60)
         with self.assertRaises(Exception):
             create_channel(self.packed,"stable",self.channels,self.key,self.pub,
                            issued_at=self.now+60,validity_seconds=3600)
 
     def test_broken_existing_cache_is_rejected(self):
+        self.cache.mkdir(mode=0o700)
         cached=self.cache/"v1.2.0"
-        cached.mkdir(parents=True)
+        cached.mkdir(mode=0o700)
         (cached/"manifest.json").write_text("bad",encoding="utf8")
         with self.assertRaises(DistributionError):
             download_channel(BASE,"stable",self.pub,self.cache,
