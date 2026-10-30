@@ -30,7 +30,7 @@ Dans l'interface actuelle, **Adresses IPv4 → Importer une IP** :
 - Les adresses en place avant la gestion de Cerato restent marquées comme
   « preexisting » : leur retrait de la gestion n'enlève pas l'adresse active.
 - Le mode « routed-wg » est visible pour la conception et refusé côté backend
-  tant qu'un agent compatible, la configuration Windows, le retour du trafic,
+  tant qu'un agent compatible, la configuration Linux, le retour du trafic,
   le routage policy-based, les permissions nftables et un rollback distant
   n'ont pas été vérifiés. **Il ne doit pas dérouter une IP déjà en service.**
 
@@ -157,7 +157,7 @@ fonctions suivantes :
   vers `owner/admin/user` avec e-mail, Argon2id et 2FA ;
 - distribution/signature des releases depuis le VPS de build et mise à jour
   **depuis la page Web** sans commande Git sur chaque panneau ;
-- routage direct de l'Additional IPv4 vers un agent Dell **Windows Server**
+- routage direct de l'Additional IPv4 vers un agent Dell **Ubuntu 24.04**
   (AllowedIPs côté WireGuard, IPv4 /32 sur Windows, routes aller/retour,
   anti-spoofing, forwarding, nftables, tests end-to-end et rollback) ;
 - complétude des actions du pare-feu, gestion des agents et état des updates.
