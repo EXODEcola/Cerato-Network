@@ -5,6 +5,7 @@ python3 -m pip install argon2-cffi
 python3 -m unittest discover -s tests -p 'test_auth_store.py' -v
 """
 import sys
+import time
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "security"))
 
 from auth_store import AuthStore, Forbidden, InvalidCredentials, viewer_projection, secure_cookie
+from mfa import code_for_counter
 
 
 class AuthStoreTests(unittest.TestCase):
@@ -22,9 +24,18 @@ class AuthStoreTests(unittest.TestCase):
         self.owner = self.store.setup_owner(
             self.store.issue_bootstrap_token(), "Main@Cerato.Test", "owner-secret-password-123"
         )
+        self.backup_codes = []
 
     def _actor(self, email, password):
         session = self.store.login(email, password, "127.0.0.1")
+        if session.get("mfa_required"):
+            if session["mfa_setup"]:
+                secret = session["otp_secret"]
+                code = code_for_counter(secret, int(time.time()) // 30)
+            else:
+                code = self.backup_codes.pop()
+            session = self.store.complete_mfa(session["challenge"], code)
+            self.backup_codes.extend(session.get("recovery_codes", []))
         return self.store.actor(session["session"]), session
 
     def test_first_login_sets_owner_email_and_password(self):
@@ -39,6 +50,10 @@ class AuthStoreTests(unittest.TestCase):
             self.store.setup_owner("fake", "other@cerato.test", "other-good-password-123")
 
     def test_login_session_and_csrf(self):
+        first = self.store.login("main@cerato.test", "owner-secret-password-123", "127.0.0.1")
+        self.assertTrue(first["mfa_required"])
+        self.assertTrue(first["mfa_setup"])
+        self.assertNotIn("session", first)
         actor, session = self._actor("main@cerato.test", "owner-secret-password-123")
         self.assertEqual(actor["role"], "owner")
         self.store.verify_csrf(session["session"], session["csrf"])
