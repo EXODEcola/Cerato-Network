@@ -13,10 +13,12 @@ git clone https://github.com/EXODEcola/Cerato-Network.git
 cd Cerato-Network
 git switch feature/secure-accounts
 
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r security/requirements.txt
-python -m unittest discover -s tests -p 'test_*.py' -v
+# Sur un VPS de développement/build Debian/Ubuntu séparé :
+bash scripts/bootstrap-dev.sh
+
+# Le bootstrap installe automatiquement Python venv, Node et dépendances manquantes,
+# puis lance les tests, dont l'API HTTP locale de bout en bout.
+# Il refuse de s'exécuter si cerato-network-web.service tourne déjà.
 ```
 
 Si les tests échouent, **ne pas poursuivre**.
