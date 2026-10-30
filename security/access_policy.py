@@ -34,6 +34,7 @@ EXACT = {
     ("POST", "/api/nat/remove"): "network_write",
     ("GET", "/api/updates"): "updates_manage",
     ("POST", "/api/updates/check"): "updates_manage",
+    ("POST", "/api/updates/stage"): "updates_manage",
     ("POST", "/api/updates/install"): "updates_manage",
     ("POST", "/api/updates/rollback"): "updates_manage",
 }
