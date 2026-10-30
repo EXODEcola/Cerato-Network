@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -103,7 +104,7 @@ def stage(bundle: Path, public_key: Path, root: Path) -> dict:
         raise StageError("Lien symbolique de distribution interdit")
     try:
         manifest=verify(bundle,public_key)
-    except (PackageError,ValueError,RuntimeError,OSError,zipfile.BadZipFile) as exc:
+    except (PackageError,ValueError,RuntimeError,OSError,zipfile.BadZipFile,subprocess.TimeoutExpired) as exc:
         raise StageError("Release non authentifiée ou archive invalide") from exc
     version=manifest["version"]
     with _lock(root):
