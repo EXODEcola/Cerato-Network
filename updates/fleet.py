@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import re
@@ -28,11 +29,19 @@ def _digest(raw):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+@contextmanager
 def _open(path):
     conn=sqlite3.connect(path,timeout=10)
-    conn.row_factory=sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=10000")
-    return conn
+    try:
+        conn.row_factory=sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=10000")
+        yield conn
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 class Fleet:
