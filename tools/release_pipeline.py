@@ -34,8 +34,8 @@ def _check_output_dir(folder: Path):
     if folder.is_symlink():
         raise PackageError("Répertoire de sortie symbolique interdit")
     folder.mkdir(parents=True, mode=0o700, exist_ok=True)
-    if folder.stat().st_mode & 0o022:
-        raise PackageError("Répertoire de sortie modifiable par le groupe ou tous")
+    if folder.stat().st_mode & 0o077:
+        raise PackageError("Répertoire de sortie doit être privé (chmod 700)")
 
 
 def _assert_regular_file(path: Path, limit: int):
@@ -74,8 +74,12 @@ def prepare(source: Path, output: Path, version: str):
     """Create a deterministic, unsigned archive using no secrets or signing key."""
     if not isinstance(version, str) or not RELEASE_PATTERN.fullmatch(version):
         raise PackageError("Version semver invalide")
-    source = Path(source).resolve(strict=True)
-    output = Path(output).resolve()
+    source_path = Path(source)
+    output_path = Path(output)
+    if source_path.is_symlink() or output_path.is_symlink():
+        raise PackageError("Source ou destination symbolique refusée")
+    source = source_path.resolve(strict=True)
+    output = output_path.resolve()
     if output == source or source in output.parents:
         raise PackageError("Sortie dans le dépôt refusée")
     _check_output_dir(output)
