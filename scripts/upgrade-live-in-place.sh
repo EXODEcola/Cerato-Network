@@ -74,11 +74,8 @@ if [[ "$MODE" == "--rollback" ]]; then
   [[ -f "$DIR/server.py" && -f "$DIR/app.js" ]] || die "Sauvegarde incomplète."
   install -m 0644 "$DIR/server.py" "$APP_HOME/backend/server.py"
   install -m 0644 "$DIR/app.js" "$APP_HOME/web/app.js"
-  if [[ -f "$DIR/ipctl" ]]; then
-    install -m 0755 "$DIR/ipctl" "$IPCTL"
-  else
-    rm -f "$IPCTL"
-  fi
+  # Keep the managed-IP restore helper intact: a new /32 may have become
+  # persistent since this upgrade. Removing it would break the next reboot.
   if [[ -f "$DIR/additional-sudoers" ]]; then
     install -m 0440 "$DIR/additional-sudoers" "$SUDOERS"
   else
@@ -130,11 +127,8 @@ restore_web() {
   echo "Échec : retour arrière du Web actuel." >&2
   cp -p "$DIR/server.py" "$APP_HOME/backend/server.py" || true
   cp -p "$DIR/app.js" "$APP_HOME/web/app.js" || true
-  if [[ "$OLD_IPCTL_PRESENT" -eq 1 ]]; then
-    cp -p "$DIR/ipctl" "$IPCTL" || true
-  else
-    rm -f "$IPCTL"
-  fi
+  # Keep root-owned persistence helper if a managed-IP state exists.
+  # The old web backend is restored without altering WAN addresses.
   if [[ -f "$DIR/additional-sudoers" ]]; then
     cp -p "$DIR/additional-sudoers" "$SUDOERS" || true
   else
