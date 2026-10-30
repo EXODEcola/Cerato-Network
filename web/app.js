@@ -195,7 +195,20 @@ function renderRecoveryCodes(codes) {
   app.append(shell);
 }
 function menuButton(text, view) {
-  const b = button(text, () => { state.view = view; renderPanel(); }, 'nav-item' + (state.view === view ? ' selected' : ''));
+  const b = button(text, async () => {
+    state.view = view;
+    try {
+      if (view === 'accounts' && state.account.role !== 'user') {
+        const result=await api('/api/accounts');
+        state.accounts=result.accounts || [];
+      } else if (view === 'updates' && state.account.role !== 'user') {
+        state.updateInfo=await api('/api/updates');
+      } else if (view === 'dashboard' || view === 'machines') {
+        state.status=await api('/api/status');
+      }
+    } catch(error) { notify(error.message,true); }
+    renderPanel();
+  }, 'nav-item' + (state.view === view ? ' selected' : ''));
   return b;
 }
 function card(title, value, subtitle) {
@@ -377,9 +390,11 @@ function renderPanel() {
   const frame = node('div','layout');
   const sidebar = node('aside','sidebar');
   sidebar.append(node('div','logo','◈  CERATO NETWORK'), node('div','nav-label','INFRASTRUCTURE'),
-    menuButton('Vue d’ensemble','dashboard'), menuButton('Machines & tunnels','machines'),
-    menuButton('Mises à jour','updates'));
-  if (state.account.role !== 'user') sidebar.append(node('div','nav-label','ADMINISTRATION'),menuButton('Comptes','accounts'));
+    menuButton('Vue d’ensemble','dashboard'), menuButton('Machines & tunnels','machines'));
+  if (state.account.role !== 'user') {
+    sidebar.append(menuButton('Mises à jour','updates'),node('div','nav-label','ADMINISTRATION'),
+                   menuButton('Comptes','accounts'));
+  }
   sidebar.append(node('div','nav-label','PERSONNEL'),menuButton('Mes identifiants','profile'));
   const content = node('div','content');
   const top = node('header','topbar');
