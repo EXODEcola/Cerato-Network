@@ -44,6 +44,14 @@ Il faut configurer GPG et la clé signataire du mainteneur au préalable. Ce tag
 
 Sur le VPS, le compte de build doit connaître la **clé GPG publique de confiance** du mainteneur, configurée par l'administrateur de l'infrastructure (ne jamais considérer comme fiable une clé récupérée automatiquement depuis le dépôt compromis).
 
+Configurer également l'empreinte complète de la clé GPG de signature comme paramètre **hors dépôt**, géré par l'opérateur de la machine :
+
+```bash
+export CERATO_TRUSTED_TAG_FINGERPRINT=EMPREINTE_GPG_APPROUVEE_40_HEXADECIMAUX
+```
+
+Remplacer la valeur d'exemple par la véritable empreinte GPG du mainteneur, obtenue et vérifiée par un canal indépendant. Le script requiert un `VALIDSIG` correspondant exactement à cette empreinte et refuse de travailler si le paramètre est absent. Cette empreinte n'est pas une clé privée.
+
 Après checkout explicite du commit tagué dans un workspace de release indépendant :
 
 ```bash
@@ -52,7 +60,7 @@ git switch --detach v0.1.0-beta.1
 bash scripts/prepare-approved-tag.sh v0.1.0-beta.1 /chemin/production-build/unsigned-v0.1.0-beta.1
 ```
 
-Cette commande refuse les tags non signés, les tags non approuvés par GPG, un HEAD différent du tag, les modifications locales suivies et les tests qui échouent.
+Cette commande refuse les tags non signés, les signatures sans empreinte approuvée, un HEAD différent du tag, les modifications locales et les tests qui échouent. Les tests et le ZIP sont produits depuis un **instantané `git archive` du tag**, sans fichiers locaux non suivis ni fichiers ignorés issus du checkout.
 
 ## Signature (identité système séparée)
 
