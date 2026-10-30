@@ -1,0 +1,6 @@
+{
+  "format": "cerato-live-auth-baseline-v1",
+  "description": "Empreintes structurelles du panneau RISE-1 observé le 30 octobre 2026 ; aucune donnée réseau ou clé",
+  "server_sha256": "9c7087a1eeca7e3c8a4462c2cd8e6659e4d692409771117c575cd00b46b30360",
+  "frontend_sha256": "5a9572988965b7d22d7ff380a95ab7e393690e9564d9fdb987714132f37ca232"
+}
