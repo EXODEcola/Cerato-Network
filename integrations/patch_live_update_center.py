@@ -8,6 +8,7 @@ URLs or paths can be passed to the update controller.
 """
 from pathlib import Path
 import argparse
+import re
 
 
 class UpgradePatchError(Exception):
@@ -67,10 +68,19 @@ def patch_backend(source:str)->str:
     if source.count(anchor)!=1:
         raise UpgradePatchError('Source du panneau inconnu : netstate introuvable')
     source=source.replace(anchor,SERVER_HELPER+'\n'+anchor)
-    get_anchor="                if p=='/api/status': return self.send_json(200,netstate())"
-    if source.count(get_anchor)!=1:
+    # Preserve the exact indentation found on the installed handler. Legacy
+    # variants differ (12 vs 16 spaces) but the route expression must match.
+    get_pattern=re.compile(
+        r"^(?P<indent> {8,24})if p=='/api/status': return self\\.send_json\\(200,netstate\\(\\)\\)[ \\t]*$",
+        re.MULTILINE,
+    )
+    matches=list(get_pattern.finditer(source))
+    if len(matches)!=1:
         raise UpgradePatchError('Handler GET actuel incompatible')
-    source=source.replace(get_anchor,GET_ROUTE+get_anchor)
+    indent=matches[0].group('indent')
+    get_anchor=matches[0].group(0)
+    inserted=indent+"if p=='/api/updates': return self.send_json(200,live_update('status'))\\n"+get_anchor
+    source=source.replace(get_anchor,inserted,1)
     post_anchor="            if p=='/api/peers':"
     if source.count(post_anchor)!=1 or "if not self.check_session(write=True)" not in source:
         raise UpgradePatchError('Handler POST ou protection CSRF incompatible')
