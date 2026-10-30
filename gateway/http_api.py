@@ -40,7 +40,12 @@ class BadRequest(Exception):
 
 
 def origin_ok(header: str) -> bool:
-    return header == ORIGIN
+    if header == ORIGIN:
+        return True
+    # Explicit loopback-only allowance to test without an HTTPS reverse proxy.
+    # Never enable this flag on a publicly exposed server.
+    return (os.environ.get("CERATO_DEV_LOOPBACK_HTTP") == "1" and
+            header in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"))
 
 
 def status_payload():
@@ -139,6 +144,18 @@ class Handler(BaseHTTPRequestHandler):
         csrf = self.headers.get("X-Cerato-CSRF", "")
         return authorize(STORE, self.token(), method, path, csrf=csrf)
 
+    @staticmethod
+    def session_cookie(token: str) -> str:
+        cookie = secure_cookie(token)
+        if os.environ.get("CERATO_DEV_LOOPBACK_HTTP") == "1":
+            cookie = cookie.replace("; Secure;", ";")
+        return cookie
+
+    @staticmethod
+    def expired_cookie() -> str:
+        attrs = "Secure; " if os.environ.get("CERATO_DEV_LOOPBACK_HTTP") != "1" else ""
+        return "cerato_session=; " + attrs + "HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+
     def do_GET(self):
         if not self.host_ok():
             return self.error(403, "Hôte non autorisé.")
@@ -206,12 +223,12 @@ class Handler(BaseHTTPRequestHandler):
                 token = session.pop("session")
                 csrf = session.pop("csrf")
                 return self.json(200, {"account": session["account"], "csrf": csrf},
-                                 cookie=secure_cookie(token))
+                                 cookie=self.session_cookie(token))
             actor = self.actor(method, path)
             if method == "POST" and path == "/api/auth/logout":
                 STORE.logout(self.token())
                 return self.json(200, {"ok": True},
-                                 cookie="cerato_session=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0")
+                                 cookie=self.expired_cookie())
             if method == "PATCH" and path == "/api/auth/me":
                 profile = STORE.change_own_identity(
                     actor, body.get("current_password"),
