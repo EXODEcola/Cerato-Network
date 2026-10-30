@@ -183,5 +183,5 @@ trap - ERR
 echo "SUCCESS : panneau original mis à niveau sur le même port 8787."
 echo "Les pairs WireGuard, configurations OVH et règles NAT existantes ont été conservés."
 echo "Le nouveau formulaire Adresses IPv4 configure maintenant le /32 en local, avec restauration au boot."
-echo "Ne pas utiliser le mode routé tant que l'agent Dell Windows n'est pas validé."
+echo "Ne pas utiliser le mode routé tant que l'agent Dell Ubuntu n'est pas validé."
 echo "Rollback applicatif : sudo bash scripts/upgrade-live-in-place.sh --rollback"
