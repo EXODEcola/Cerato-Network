@@ -7,6 +7,8 @@ controller must perform health checks and service restarts before production.
 from __future__ import annotations
 
 import fcntl
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -120,8 +122,13 @@ def stage(bundle: Path, public_key: Path, root: Path) -> dict:
         tmp=Path(tempfile.mkdtemp(prefix=".incoming-",dir=releases))
         try:
             archive=(bundle/manifest["artifact"]).read_bytes()
+            # Verify the *same bytes* that we extract, even if an attacker
+            # swaps the distribution file after the initial verify().
+            if (len(archive) != manifest["size"] or
+                hashlib.sha256(archive).hexdigest() != manifest["sha256"]):
+                raise StageError("Archive modifiée après vérification")
             validate_archive(archive)
-            with zipfile.ZipFile(bundle/manifest["artifact"],"r") as z:
+            with zipfile.ZipFile(io.BytesIO(archive),"r") as z:
                 for item in z.infolist():
                     rel=Path(*item.filename.split("/")[1:])
                     if not rel.parts:
