@@ -16,6 +16,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from mfa import generate_secret, code_for_counter, verify as verify_totp, enrollment_uri, recovery_codes, consume_recovery
+
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 
@@ -112,6 +114,22 @@ class AuthStore:
                 CREATE TABLE IF NOT EXISTS failed_logins (
                   key TEXT PRIMARY KEY, attempts INTEGER NOT NULL,
                   since INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS mfa (
+                  account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+                  secret TEXT NOT NULL,
+                  enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+                  last_counter INTEGER NOT NULL DEFAULT -1
+                );
+                CREATE TABLE IF NOT EXISTS mfa_challenges (
+                  tokenhash TEXT PRIMARY KEY,
+                  account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
+                  expires_at INTEGER NOT NULL,
+                  attempts INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS mfa_recovery (
+                  codehash TEXT PRIMARY KEY,
+                  account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE
                 );
                 CREATE TABLE IF NOT EXISTS auth_audit (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,15 +233,98 @@ class AuthStore:
                 raise InvalidCredentials("Identifiants incorrects ou accès temporairement limité.")
             for k in keys:
                 db.execute("DELETE FROM failed_logins WHERE key=?", (k,))
-            token = secrets.token_urlsafe(48)
-            csrf = secrets.token_urlsafe(32)
-            db.execute(
-                "INSERT INTO sessions(tokenhash,csrfhash,account_id,expires_at) VALUES(?,?,?,?)",
-                (_digest(token), _digest(csrf), row["id"], now + SESSION_SECONDS),
-            )
-            self._audit(db, "login-success", row["id"])
-            return {"session": token, "csrf": csrf, "expires_at": now + SESSION_SECONDS,
-                    "account": _public(row)}
+            if row["role"] in ("owner", "admin"):
+                mf = db.execute("SELECT * FROM mfa WHERE account_id=?", (row["id"],)).fetchone()
+                if mf is None:
+                    secret = generate_secret()
+                    db.execute("INSERT INTO mfa(account_id,secret) VALUES(?,?)", (row["id"], secret))
+                    mf = db.execute("SELECT * FROM mfa WHERE account_id=?", (row["id"],)).fetchone()
+                # A password alone NEVER creates an administrator session.
+                challenge = secrets.token_urlsafe(40)
+                db.execute("DELETE FROM mfa_challenges WHERE account_id=?", (row["id"],))
+                db.execute(
+                    "INSERT INTO mfa_challenges(tokenhash,account_id,expires_at,attempts) VALUES(?,?,?,0)",
+                    (_digest(challenge), row["id"], now + 300),
+                )
+                self._audit(db, "mfa-challenge-issued", row["id"])
+                answer = {"mfa_required": True, "mfa_setup": not bool(mf["enabled"]),
+                          "challenge": challenge}
+                if not mf["enabled"]:
+                    answer["otp_secret"] = mf["secret"]
+                    answer["otp_uri"] = enrollment_uri(mf["secret"], row["email"])
+                return answer
+            return self._make_session(db, row, now)
+
+    @staticmethod
+    def _make_session(db, row, now):
+        token = secrets.token_urlsafe(48)
+        csrf = secrets.token_urlsafe(32)
+        db.execute(
+            "INSERT INTO sessions(tokenhash,csrfhash,account_id,expires_at) VALUES(?,?,?,?)",
+            (_digest(token), _digest(csrf), row["id"], now + SESSION_SECONDS),
+        )
+        AuthStore._audit(db, "login-success", row["id"])
+        return {"session": token, "csrf": csrf, "expires_at": now + SESSION_SECONDS,
+                "account": _public(row)}
+
+    def complete_mfa(self, challenge: str, code: str) -> dict:
+        """Complete password challenge with TOTP or a single-use recovery code.
+
+        Five attempts, five-minute TTL, replay-protected TOTP. No privileged
+        session is created until successful two-factor verification.
+        """
+        if not isinstance(challenge, str) or not 32 <= len(challenge) <= 256:
+            raise InvalidCredentials("Code de vérification invalide ou expiré.")
+        if not isinstance(code, str) or len(code) > 128:
+            raise InvalidCredentials("Code de vérification invalide ou expiré.")
+        now = int(time.time())
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT c.*, a.email,a.passhash,a.role,a.active,a.created_at,m.secret,m.enabled,m.last_counter "
+                "FROM mfa_challenges c JOIN accounts a ON c.account_id=a.id "
+                "JOIN mfa m ON m.account_id=a.id "
+                "WHERE c.tokenhash=?", (_digest(challenge),)
+            ).fetchone()
+            if not row or row["expires_at"] < now or not row["active"] or row["attempts"] >= 5:
+                raise InvalidCredentials("Code de vérification invalide ou expiré.")
+            db.execute("UPDATE mfa_challenges SET attempts=attempts+1 WHERE tokenhash=?", (_digest(challenge),))
+            step = verify_totp(row["secret"], code, at=now, last_counter=row["last_counter"])
+            recovery_used = False
+            if step is None and row["enabled"]:
+                recovery = db.execute("SELECT codehash FROM mfa_recovery WHERE account_id=?",
+                                      (row["account_id"],)).fetchall()
+                valid, _ = consume_recovery(code, [entry["codehash"] for entry in recovery])
+                if valid:
+                    # Prevent concurrent reuse of one recovery code.
+                    db.execute("DELETE FROM mfa_recovery WHERE account_id=? AND codehash=?",
+                               (row["account_id"], _digest(code)))
+                    recovery_used = True
+            if step is None and not recovery_used:
+                self._audit(db, "mfa-rejected", row["account_id"])
+                db.commit()  # Retain rate limit on rejected OTP requests.
+                raise InvalidCredentials("Code de vérification invalide ou expiré.")
+            backup_codes = None
+            if not row["enabled"]:
+                if step is None:
+                    raise InvalidCredentials("Authentification forte requise.")
+                backup_codes, digests = recovery_codes()
+                db.execute("DELETE FROM mfa_recovery WHERE account_id=?", (row["account_id"],))
+                for digest in digests:
+                    db.execute("INSERT INTO mfa_recovery(codehash,account_id) VALUES(?,?)",
+                               (digest, row["account_id"]))
+            if step is not None:
+                db.execute("UPDATE mfa SET enabled=1,last_counter=? WHERE account_id=?",
+                           (step, row["account_id"]))
+            db.execute("DELETE FROM mfa_challenges WHERE account_id=?", (row["account_id"],))
+            self._audit(db, "mfa-verified", row["account_id"])
+            result = self._make_session(db, {
+                "id": row["account_id"], "email": row["email"], "role": row["role"],
+                "active": row["active"],
+            }, now)
+            if backup_codes is not None:
+                result["recovery_codes"] = backup_codes
+            return result
 
     def actor(self, session_token: str) -> dict:
         if not isinstance(session_token, str) or not (20 <= len(session_token) <= 256):
@@ -236,6 +337,10 @@ class AuthStore:
             ).fetchone()
             if not row:
                 raise InvalidCredentials("Session expirée.")
+            if row["role"] in ("owner", "admin"):
+                enabled = db.execute("SELECT enabled FROM mfa WHERE account_id=?", (row["id"],)).fetchone()
+                if not enabled or not enabled["enabled"]:
+                    raise InvalidCredentials("Authentification forte requise.")
             return _public(row)
 
     def verify_csrf(self, session_token: str, csrf_token: str):
