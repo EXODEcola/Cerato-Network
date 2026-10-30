@@ -108,18 +108,19 @@ def patch_frontend(source:str)->str:
     if source.count(nav_anchor)!=1:
         raise UpgradePatchError('Sidebar historique incompatible')
     source=source.replace(nav_anchor,nav_anchor+",['updates','Mises à jour','settings']")
-    state_anchor="let csrf='',screen='overview',live=null,logs=[],busy=false;"
-    if source.count(state_anchor)!=1:
-        raise UpgradePatchError('Structure frontend actuelle inconnue')
-    source=source.replace(state_anchor,state_anchor+"let updateInfo=null;")
+    # The live RISE-1 JavaScript already contains the Additional IPv4 patch,
+    # so its state declarations are not guaranteed to be byte-for-byte equal
+    # to the original standalone fixture. Inject next to the *verified* render
+    # function instead. The variable remains scoped within the existing IIFE.
     render_anchor="function render(){if(!live)return;"
     if source.count(render_anchor)!=1:
         raise UpgradePatchError('Rendu du panneau incompatible')
-    source=source.replace(render_anchor,UPDATES_JS+'\n'+render_anchor)
-    source=source.replace(
-        "{overview,ips,machines,nat,firewall,topology,logs,settings}[screen]",
-        "{overview,ips,machines,nat,firewall,topology,logs,settings,updates}[screen]"
-    )
+    source=source.replace(render_anchor,"let updateInfo=null;\n"+UPDATES_JS+'\n'+render_anchor)
+    map_old="{overview,ips,machines,nat,firewall,topology,logs,settings}[screen]"
+    if source.count(map_old)!=1:
+        raise UpgradePatchError('Table des pages incompatible')
+    source=source.replace(map_old,
+                          "{overview,ips,machines,nat,firewall,topology,logs,settings,updates}[screen]")
     anchor="document.querySelectorAll('[data-screen]').forEach(b=>b.onclick=()=>{screen=b.dataset.screen;render()});"
     new="""document.querySelectorAll('[data-screen]').forEach(b=>b.onclick=async()=>{
       screen=b.dataset.screen;
