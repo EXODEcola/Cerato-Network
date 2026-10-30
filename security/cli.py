@@ -29,6 +29,7 @@ def main():
     sub.add_parser("bootstrap-token", help="Code de première configuration (15 minutes)")
     sub.add_parser("owner-status", help="État du compte principal, sans données sensibles")
     sub.add_parser("owner-reset", help="Modifier l'e-mail et le mot de passe principal par SSH")
+    sub.add_parser("owner-reset-mfa", help="Réinitialiser le 2FA du propriétaire via SSH uniquement")
     args = parser.parse_args()
     local_only()
     store = AuthStore(args.database)
@@ -40,6 +41,23 @@ def main():
         return
     if args.command == "owner-status":
         print("Initialisé :" if store.is_initialized() else "Non initialisé")
+        return
+    if args.command == "owner-reset-mfa":
+        with store._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT id,email FROM accounts WHERE role='owner'").fetchone()
+            if row is None:
+                sys.exit("Compte principal introuvable.")
+            print("Réinitialisation du double facteur pour :", row["email"])
+            answer = input("Écris REINITIALISER pour confirmer : ").strip()
+            if answer != "REINITIALISER":
+                sys.exit("Opération annulée.")
+            db.execute("DELETE FROM mfa_challenges WHERE account_id=?", (row["id"],))
+            db.execute("DELETE FROM mfa_recovery WHERE account_id=?", (row["id"],))
+            db.execute("DELETE FROM mfa WHERE account_id=?", (row["id"],))
+            db.execute("DELETE FROM sessions WHERE account_id=?", (row["id"],))
+            store._audit(db, "primary-owner-mfa-reset-via-local-cli", row["id"], row["id"])
+        print("2FA réinitialisé. Le prochain login exigera une nouvelle configuration TOTP.")
         return
     if args.command == "owner-reset":
         if not store.is_initialized():
