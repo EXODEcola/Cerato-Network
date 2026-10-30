@@ -27,6 +27,14 @@ Les administrateurs supplémentaires doivent suivre le même processus TOTP à l
 - Serveur de test strictement sur `127.0.0.1` ; mode HTTP local opt-in seulement.
 - Aucune mutation du réseau ni des mises à jour par l'API de développement.
 
+## Clé de chiffrement MFA au repos
+
+Les secrets TOTP sont enregistrés en SQLite sous forme `enc:v1:...` (AES-256-GCM, nonce aléatoire et AAD liée à l'identifiant du compte). La clé de 32 octets est stockée séparément dans `mfa-encryption.key`, à côté de la base, avec les permissions `0600` et le même propriétaire que le processus de service.
+
+**La sauvegarde doit contenir la base ET la clé ; elles ne doivent jamais être publiées sur GitHub.** Si une base existante perd sa clé, Cerato refuse de générer une nouvelle clé automatiquement : l'administrateur doit restaurer la clé à partir de la sauvegarde ou effectuer une récupération contrôlée. Il ne faut pas copier cette clé dans le dossier Web.
+
+**Compatibilité** : une ancienne base contenant un secret TOTP en clair n'est pas automatiquement migrée par cette branche expérimentale. Une migration explicite, testée et réversible devra être réalisée avant la première mise en production.
+
 ## Récupération SSH du propriétaire
 
 ```bash
@@ -63,7 +71,7 @@ La vérification de signature et du contenu se fait côté serveur. **Aucune ins
 
 ## Points à auditer avant une version publique stable
 
-- Chiffrement des secrets TOTP au repos et rotation des clés.
+- Auditer et documenter la rotation contrôlée des clés AES-256-GCM ; le chiffrement des secrets TOTP au repos est maintenant codé dans `security/secretbox.py`.
 - Tests d'intégration proxy Nginx et HTTPS, politique stricte de cookies.
 - Attaques de charge, récupération de session, horloge TOTP, verrouillage et CSRF.
 - Configuration initiale en cas de coupure ou migration d'une installation déjà existante.
