@@ -70,7 +70,28 @@ def status_payload():
         result = {k: data.get(k) for k in (
             "wan_if", "wg_if", "wan_ips", "pool", "wg_port", "gateway_tunnel_ip",
             "gateway_public_key", "publications") if k in data}
-        result.update(peers=peers, tunnel_active=bool(data.get("tunnel_active")),
+        # Use WireGuard's actual status rather than showing an invented
+        # connected/disconnected state based on a config field.
+        tunnel_active = False
+        try:
+            tunnel = subprocess.run(["sudo", "-n", CTL, "tunnel"],
+                                    capture_output=True, text=True, timeout=5, check=False)
+            if tunnel.returncode == 0:
+                snapshot = json.loads(tunnel.stdout)
+                tunnel_active = bool(snapshot.get("active"))
+                raw = snapshot.get("dump", "")
+                live = {}
+                for line in raw.strip().splitlines()[1:]:
+                    fields = line.split("\\t")
+                    if len(fields) >= 7:
+                        live[fields[0]] = {"last_handshake": int(fields[4]),
+                                           "received": int(fields[5]),
+                                           "sent": int(fields[6])}
+                for peer in peers.values():
+                    peer.update(live.get(peer.get("pubkey"), {}))
+        except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
+            pass
+        result.update(peers=peers, tunnel_active=tunnel_active,
                       dashboard_mode="live")
         return result
     except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
