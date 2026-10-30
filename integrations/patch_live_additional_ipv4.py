@@ -45,7 +45,7 @@ API_HANDLER = '''            if p=='/api/ip/preview':
                 ip=valid_ip(b.get('ip'),global_ip=True)
                 mode=b.get('mode','local-nat')
                 if mode!='local-nat':
-                    raise UserError('Le routage complet requiert un agent Windows vérifié et un rollback réseau. Non activé.')
+                    raise UserError('Le routage complet requiert un agent Linux vérifié et un rollback réseau. Non activé.')
                 # 1. Add the /32 locally and persist it (no interface restart).
                 result=additional_ipctl('import-local',ip)
                 # 2. The existing Cerato controller remains authoritative for
@@ -75,7 +75,7 @@ def patch_app(code: str) -> str:
     if "/api/ip/configure" in code:
         raise PatchError("UI Additional IPv4 déjà corrigée.")
     original="if(action==='add-ip')return {title:'Importer une Additional IPv4',desc:'L’adresse doit déjà être configurée sur l’interface WAN du RISE-1.',endpoint:'/api/ip/add',fields:[['ip','IPv4 OVH additionnelle','text','']]}"
-    revised="if(action==='add-ip')return {title:'Importer et configurer une Additional IPv4',desc:'Cerato détecte la WAN et configure la /32 de manière persistante. Le mode routé nécessite un agent Windows et reste désactivé tant qu’il n’est pas validé.',endpoint:'/api/ip/configure',fields:[['ip','IPv4 OVH additionnelle','text',''],['mode','Mode d’attribution','select',['local-nat','routed-wg']]]}"
+    revised="if(action==='add-ip')return {title:'Importer et configurer une Additional IPv4',desc:'Cerato détecte la WAN et configure la /32 de manière persistante. Le mode routé nécessite un agent Linux et reste désactivé tant qu’il n’est pas validé.',endpoint:'/api/ip/configure',fields:[['ip','IPv4 OVH additionnelle','text',''],['mode','Mode d’attribution','select',['local-nat','routed-wg']]]}"
     if code.count(original)!=1:
         raise PatchError("UI incompatible : formulaire d'import inattendu.")
     code=code.replace(original,revised)
