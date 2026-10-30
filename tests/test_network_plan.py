@@ -12,7 +12,7 @@ class NetworkPlanTests(unittest.TestCase):
     def setUp(self):
         self.plan=Plan(wan_iface="eth0",tunnel_iface="wg-cerato",
                        gateway_tunnel_ip="10.80.0.1",cidr="10.80.0.0/24",
-                       primary_ipv4="203.0.113.10")
+                       primary_ipv4="9.9.9.9")
         # Use globally routable IPv4 as test-only placeholders. Never route them.
         self.plan.add_peer("node-1","10.80.0.2",KEY)
 
