@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -36,7 +37,7 @@ def release_info(release_dir: str = "", public_key: str = "", installed_version:
         return result
     try:
         manifest=verify(folder,key)
-    except (PackageError, OSError, ValueError, RuntimeError) as e:
+    except (PackageError, OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
         result["reason"]="Release refusée : signature ou intégrité non valide"
         return result
     version=manifest["version"]
