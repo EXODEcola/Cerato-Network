@@ -145,6 +145,9 @@ restore_web() {
 trap restore_web ERR
 
 install -m 0755 "$ROOT/network/ovh_additional_ip.py" "$IPCTL"
+# Adopt only the existing pool IPv4 addresses that are ALREADY on WAN.
+# No address, peer, route or nftables rule is changed during migration.
+"$IPCTL" adopt-existing-pool
 
 cat > "$SUDOERS" <<'SUDO'
 Defaults:ceratonet env_reset
