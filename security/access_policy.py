@@ -11,6 +11,7 @@ PUBLIC = {
     ("GET", "/api/auth/setup-status"),
     ("POST", "/api/auth/setup"),
     ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/mfa/verify"),
 }
 
 EXACT = {
