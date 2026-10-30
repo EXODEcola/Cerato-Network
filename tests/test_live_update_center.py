@@ -66,7 +66,9 @@ class LiveUpdateCenterTests(unittest.TestCase):
         self.assertIn("id=\"updates-install\"",ui)
         self.assertIn("'/api/updates/check'",ui)
         self.assertIn("'/api/updates/install'",ui)
-        self.assertIn("settings,updates}[screen]",ui)
+        self.assertIn("settings}[screen]",ui)
+        self.assertIn("if(screen==='updates')",ui)
+        self.assertIn("document.addEventListener('click'",ui)
         with self.assertRaises(UpgradePatchError):
             patch_frontend(ui)
 
@@ -85,8 +87,27 @@ class LiveUpdateCenterTests(unittest.TestCase):
         result=patch_frontend(current)
         self.assertEqual(result.count("let updateInfo=null;"),1)
         self.assertIn("'/api/ip/configure'",result)
-        self.assertIn("settings,updates}[screen]",result)
+        self.assertIn("settings}[screen]",result)
+        self.assertIn("if(screen==='updates')",result)
         self.assertIn("function updates(){",result)
+
+    def test_real_world_page_map_can_change_without_unsafe_rewrite(self):
+        # Earlier patches or a newer UI can add pages, reorder them or put
+        # spaces in the mapping. None of these mappings should be rewritten.
+        old="{overview,ips,machines,nat,firewall,topology,logs,settings}[screen]"
+        for new in (
+            "{overview,ips,machines,nat,firewall,topology,logs,settings,overviewAdvanced}[screen]",
+            "{ overview, ips, machines, nat, firewall, topology, logs, settings }[screen]",
+            "{overview,ips,nat,machines,settings,topology,firewall,logs}[screen]",
+        ):
+            with self.subTest(mapping=new):
+                current=APP_SAMPLE.replace(old,new)
+                result=patch_frontend(current)
+                self.assertIn(new,result)
+                self.assertIn("if(screen==='updates')",result)
+                self.assertIn("shell(updates());",result)
+                self.assertIn("bind();",result)
+                self.assertEqual(result.count("document.addEventListener('click'"),1)
 
     def test_bad_layout_refused(self):
         with self.assertRaises(UpgradePatchError):
