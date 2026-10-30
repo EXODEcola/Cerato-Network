@@ -84,3 +84,290 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 
 /* Temporary MFA seed and one-time recovery codes */
 .secret-key{background:#09121e;border:1px dashed #42617c;border-radius:9px;padding:15px;color:#d4f0ff;line-height:1.7;letter-spacing:.075em;word-break:break-all;white-space:pre-wrap;user-select:all;margin:5px 0 2px}
+
+
+/* CERATO NETWORK — Graphite Operations
+   Neutral operations console inspired by industrial router UIs.
+   Safe append-only layer: preserves the existing page layouts and behavior.
+   Do not show internal style names, versions or design iterations in the UI. */
+:root {
+  color-scheme: dark;
+  --bg: #0f1114;
+  --nav: #171a1e;
+  --panel: #1b1f23;
+  --panel2: #24292e;
+  --border: #353a3f;
+  --text: #e9edf0;
+  --muted: #a3acb4;
+  --accent: #78b09f;
+  --accent2: #9bd1bc;
+  --red: #e58f8f;
+  --green: #7bc4a3;
+  --cerato-surface: #1b1f23;
+  --cerato-surface-raised: #23282d;
+  --cerato-surface-nav: #171a1e;
+  --cerato-outline: #353b40;
+  --cerato-font-muted: #a2acb4;
+  --cerato-interactive: #81b8a7;
+  --cerato-warning: #d4b173;
+}
+html { color-scheme: dark; }
+body {
+  background: #101215;
+  color: var(--text);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .002em;
+}
+:is(.sidebar, aside.sidebar) {
+  background: #171a1e;
+  border-right: 1px solid #343a3f;
+  box-shadow: none;
+}
+:is(.topbar, .top-bar, header.topbar, header.header) {
+  background: #171a1e;
+  border-bottom: 1px solid #333a40;
+  box-shadow: none;
+}
+:is(.logo, .brand, .brand-name) {
+  color: #f0f3f5;
+  text-shadow: none;
+  font-weight: 760;
+  letter-spacing: .04em;
+}
+:is(.nav-label, .sidebar-label, .menu-label, .nav-group-title) {
+  color: #818c93;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .105em;
+  font-weight: 700;
+}
+:is(.nav-item, .nav-link, .sidebar a, [data-screen]) {
+  color: #b7bec4;
+  border-radius: 5px;
+  transition: background-color .12s ease, color .12s ease;
+}
+:is(.nav-item, .nav-link, .sidebar a, [data-screen]):hover {
+  color: #f2f5f6;
+  background: #272d31;
+}
+:is(.nav-item.selected, .nav-item.active, .nav-link.active, .sidebar .active, [data-screen].active) {
+  color: #f2f5f6;
+  background: #2b3235;
+  box-shadow: inset 3px 0 #78b09f;
+  border-color: transparent;
+}
+:is(.main, .main-content, .content) {
+  color: #e9edf0;
+}
+:is(.page-title, h1) {
+  font-weight: 680;
+  letter-spacing: -.026em;
+}
+:is(.section, .card, .panel, .metric-card, .metric, .infobox, .data-card,
+       .box, .settings-card, .form-panel) {
+  background: #1b1f23;
+  border: 1px solid #353b40;
+  box-shadow: none;
+  border-radius: 7px;
+  color: #e9edf0;
+}
+:is(.section, .panel) > :is(h2, h3):first-child {
+  color: #e7eced;
+  font-weight: 680;
+  letter-spacing: -.01em;
+}
+:is(.metric-card, .metric) {
+  background: #20252a;
+  border-color: #353b40;
+  border-radius: 7px;
+}
+:is(.metric-label, .metric small, .metric-title, .hint, .screen-sub,
+       .muted, .muted-note, .disclaimer, .field-label) {
+  color: #9faab2;
+}
+:is(.metric-value, .metric strong) {
+  color: #eef1f2;
+  font-weight: 690;
+  letter-spacing: -.025em;
+}
+:is(.infobox, .info-box, .information) {
+  background: #22292a;
+  border: 1px solid #40534d;
+  color: #cfddd7;
+}
+:is(.infobox) a { color: #b3d9cc; }
+:is(.btn, .btn2, .button, button:not(.nav-item):not(.nav-link)) {
+  background: #2c3338;
+  border: 1px solid #4a535a;
+  color: #e9eef0;
+  border-radius: 5px;
+  font-weight: 580;
+  text-shadow: none;
+  box-shadow: none;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+:is(.btn, .btn2, .button, button:not(.nav-item):not(.nav-link)):hover:not(:disabled) {
+  background: #374046;
+  border-color: #6b8580;
+  color: #fff;
+  box-shadow: none;
+}
+:is(.btn.primary, .btn2.primary, .button.primary, button.primary) {
+  background: #42695e;
+  border-color: #689b88;
+  color: #f3f8f5;
+}
+:is(.btn.primary, .btn2.primary, .button.primary, button.primary):hover:not(:disabled) {
+  background: #507c6d;
+  border-color: #98ccb7;
+}
+:is(button:disabled, .button:disabled, .btn:disabled, .btn2:disabled) {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.18);
+}
+:is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid #9bcdb7;
+  outline-offset: 2px;
+}
+:is(input, select, textarea, .textinput, .search-input) {
+  background: #14181b;
+  color: #ebeff1;
+  border: 1px solid #495157;
+  border-radius: 5px;
+  box-shadow: none;
+}
+:is(input, select, textarea, .textinput):focus {
+  border-color: #82b5a2;
+}
+:is(input, textarea)::placeholder { color: #8b969e; }
+:is(.table, table) {
+  color: #e4e9eb;
+  border-collapse: collapse;
+}
+:is(.table, table) thead,
+:is(.table, table) th {
+  background: #24292d;
+  color: #b9c3c9;
+  border-color: #3d454b;
+  font-size: 11px;
+  text-transform: none;
+  font-weight: 670;
+  letter-spacing: .018em;
+}
+:is(.table, table) td {
+  border-color: #353b40;
+}
+:is(.table, table) tbody tr:nth-child(even) {
+  background: #1e2327;
+}
+:is(.table, table) tbody tr:hover {
+  background: #29312f;
+}
+:is(.status, .badge, .pill, .role) {
+  color: #c2d7ce;
+  background: #2a3b36;
+  border: 1px solid #48675b;
+  border-radius: 4px;
+  box-shadow: none;
+}
+:is(.status.pending, .badge.pending, .status.warning, .badge.warning) {
+  color: #e3c895;
+  background: #3c3327;
+  border-color: #6c5534;
+}
+:is(.status.error, .badge.error, .status.danger) {
+  color: #e6aaa8;
+  background: #412c2e;
+  border-color: #704a4e;
+}
+:is(.notice) {
+  background: #24382f;
+  border-color: #547764;
+  border-radius: 6px;
+  box-shadow: 0 9px 28px #0008;
+}
+:is(.notice.error) {
+  background: #3d2b2e;
+  border-color: #815258;
+}
+:is(.secret-key) {
+  background: #13181a;
+  border: 1px dashed #52645a;
+  color: #dce8e1;
+}
+:is(.auth-brand, .protected) { color: #a1d0bb; }
+:is(.nav-item.selected, .nav-link.active, [data-screen].active) svg,
+:is(.nav-item.selected, .nav-link.active, [data-screen].active) i {
+  color: #a5d3c0;
+}
+:is(.section, .card, .panel, .metric-card) :is(a, .link) {
+  color: #add1c2;
+}
+@media (max-width: 840px) {
+  :is(.section, .card, .panel) { border-radius: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.nav-item, .nav-link, .btn, .btn2, button) { transition: none; }
+}
+
+
+/* Functional update-center hierarchy; no decorative gradients or glowing blue. */
+.cerato-updates { color: #e8ecef; max-width: 1260px; margin: 0; }
+.cerato-update-header {
+  display: flex; align-items: end; justify-content: space-between;
+  gap: 18px; margin: 0 0 22px;
+}
+.cerato-update-header h2 {
+  font-size: 24px; letter-spacing: -.03em; font-weight: 720;
+  line-height: 1.2; margin: 5px 0 8px;
+}
+.cerato-update-header p { margin: 0; color: #acb5bb; font-size: 13px; }
+.cerato-eyebrow { color: #9bb6aa; letter-spacing: .11em; font-size: 10px; font-weight: 690; }
+.cerato-update-actions { display: flex; gap: 8px; }
+.cerato-update-summary {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0; border: 1px solid #373e43; border-radius: 7px;
+  overflow: hidden; background: #1b2024; margin-bottom: 15px;
+}
+.cerato-update-summary > div { padding: 18px 20px; border-right: 1px solid #353c40; min-width: 0; }
+.cerato-update-summary > div:last-child { border-right: 0; }
+.cerato-update-summary small { display: block; color: #abb3ba; font-size: 11px; margin-bottom: 12px; }
+.cerato-update-summary strong { color: #eef2f3; display: block; font-weight: 670; font-size: 17px; overflow-wrap: anywhere; }
+.cerato-update-panel {
+  border: 1px solid #373e43; border-radius: 7px;
+  background: #1b2024; margin-top: 15px; padding: 21px;
+}
+.cerato-update-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.cerato-update-panel-head h3 { font-size: 14px; letter-spacing: -.015em; font-weight: 680; margin: 0; }
+.cerato-update-state { display: inline-flex; align-items: center; font-size: 11px; padding: 5px 9px; border-radius: 4px; font-weight: 640; white-space: nowrap; }
+.cerato-update-state.ok { background: #263c32; color: #a8ddc1; border: 1px solid #427359; }
+.cerato-update-state.warning { background: #3d3427; color: #e4c792; border: 1px solid #6f5732; }
+.cerato-update-state.error { background: #462c2c; color: #edb2ac; border: 1px solid #764b4b; }
+.cerato-update-state.neutral { background: #31383e; color: #c1ccd2; border: 1px solid #4d585f; }
+.cerato-update-description { margin: 6px 0 19px; color: #b3bdc3; font-size: 12px; line-height: 1.6; }
+.cerato-update-facts { border-top: 1px solid #384146; border-bottom: 1px solid #384146; }
+.cerato-update-facts > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid #31393e; }
+.cerato-update-facts > span:last-child { border-bottom: 0; }
+.cerato-update-facts b { font-size: 12px; color: #e4e9eb; font-weight: 560; }
+.cerato-update-facts em { font-size: 12px; font-style: normal; color: #a7b4ba; }
+.cerato-update-install { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 19px 0 0; }
+.cerato-update-install span { color: #98a3a9; font-size: 11px; max-width: 560px; line-height: 1.5; }
+.cerato-updates table { width: 100%; border-collapse: collapse; }
+.cerato-updates table th, .cerato-updates table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #353d42; }
+.cerato-updates table th { color: #bac4ca; background: #24292e; font-size: 11px; }
+.cerato-updates table td { color: #d9e2e5; font-size: 12px; }
+@media (max-width: 980px) {
+  .cerato-update-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cerato-update-summary > div:nth-child(2) { border-right: 0; }
+  .cerato-update-summary > div:nth-child(-n+2) { border-bottom: 1px solid #353c40; }
+}
+@media (max-width: 560px) {
+  .cerato-update-header { align-items: start; flex-direction: column; }
+  .cerato-update-summary { grid-template-columns: 1fr; }
+  .cerato-update-summary > div { border-right: 0; border-bottom: 1px solid #353c40; }
+  .cerato-update-summary > div:last-child { border-bottom: 0; }
+  .cerato-update-facts > span { align-items: start; flex-direction: column; gap: 4px; }
+}
