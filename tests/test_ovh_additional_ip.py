@@ -65,7 +65,7 @@ class AdditionalIPTests(unittest.TestCase):
             self.assertNotIn("nft",argv)
             self.assertNotIn("wg",argv)
             self.assertNotIn("flush",argv)
-            self.assertNotIn("route"," ".join(argv[3:]) if len(argv)>3 else "")
+            self.assertFalse(len(argv)>3 and argv[:3]==("ip","-4","route") and argv[3] in ("add","del","replace","flush"))
 
     def test_preexisting_alias_not_deleted_when_unmanaged(self):
         self.addresses.add("54.37.165.151")
@@ -84,7 +84,7 @@ class AdditionalIPTests(unittest.TestCase):
     def test_routed_mode_is_advertised_but_never_applied(self):
         result=ipctl.preview("54.37.165.151","routed-wg")
         self.assertFalse(result["supported"])
-        self.assertIn("Dell" if False else "agent Windows",result["reason"])
+        self.assertIn("agent Windows",result["reason"])
         self.assertFalse(any(x[:4]==("ip","-4","address","add") for x in self.commands))
 
     def test_reject_public_address_when_owned_by_nat_mapping(self):
