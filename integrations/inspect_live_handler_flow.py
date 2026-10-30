@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Read-only, allowlisted AST audit of the existing RISE-1 HTTP handlers.
 
-No source code, tokens, arbitrary strings, environment values, network addresses
-or sensitive literals are printed. Never change files/services/network state.
-The result is an integration map, NOT a guarantee of authentication safety.
+Never prints source code, credentials, arbitrary route names, environment
+values, addresses or sensitive literals. This is an integration map, NOT
+proof of authorization safety and NOT a deployment script.
 """
 from __future__ import annotations
 
@@ -11,15 +11,10 @@ import argparse
 import ast
 import json
 from pathlib import Path
-from inspect_live_auth_compat import (
-    CLIENT, SERVER, InventoryError, _load, inspect,
-)
+from inspect_live_auth_compat import CLIENT, SERVER, InventoryError, _load, inspect
+from check_live_auth_cutover import EXPECTED_ROUTES
 
 VERBS = ('GET', 'POST', 'PATCH', 'DELETE')
-REVIEWED_HOOKS = frozenset({
-    'check_session', 'read_body', 'send_json', 'audit',
-    'send_error', 'do_GET', 'do_POST', 'do_PATCH', 'do_DELETE',
-})
 MAX_CLASSES = 40
 MAX_ROUTES = 128
 
@@ -29,19 +24,18 @@ class HandlerAuditError(ValueError):
 
 
 def _called_name(call: ast.Call) -> str | None:
-    func = call.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
     return None
 
 
 def _method_calls(method: ast.FunctionDef | ast.AsyncFunctionDef) -> dict:
     counts = {k: 0 for k in ('check_session', 'read_body', 'send_json', 'audit')}
-    for n in ast.walk(method):
-        if isinstance(n, ast.Call):
-            name = _called_name(n)
+    for node in ast.walk(method):
+        if isinstance(node, ast.Call):
+            name = _called_name(node)
             if name in counts:
                 counts[name] += 1
     return counts
@@ -49,16 +43,15 @@ def _method_calls(method: ast.FunctionDef | ast.AsyncFunctionDef) -> dict:
 
 def _literal_route_conditions(method: ast.FunctionDef | ast.AsyncFunctionDef,
                               known: set[str]) -> set[str]:
-    """Conservative: only route literals used in an if expression are counted."""
+    """Only fixed, already reviewed literals inside if-tests are emitted."""
     observed = set()
     for node in ast.walk(method):
         if not isinstance(node, ast.If):
             continue
         for test in ast.walk(node.test):
-            if not isinstance(test, ast.Constant) or not isinstance(test.value, str):
-                continue
-            if test.value in known:
-                observed.add(test.value)
+            if isinstance(test, ast.Constant) and isinstance(test.value, str):
+                if test.value in known:
+                    observed.add(test.value)
     return observed
 
 
@@ -69,9 +62,10 @@ def audit(backend: Path = SERVER, frontend: Path = CLIENT) -> dict:
         parsed = ast.parse(source, filename='server.py')
     except SyntaxError as exc:
         raise HandlerAuditError('Syntaxe du backend incompatible') from exc
-    declared = set(base['api_routes'])
-    if len(declared) > MAX_ROUTES:
+    discovered = set(base['api_routes'])
+    if len(discovered) > MAX_ROUTES:
         raise HandlerAuditError('Inventaire trop volumineux')
+    reviewed = discovered.intersection(EXPECTED_ROUTES)
     classes = [n for n in ast.walk(parsed) if isinstance(n, ast.ClassDef)]
     if len(classes) > MAX_CLASSES:
         raise HandlerAuditError('Trop de classes pour une analyse fiable')
@@ -80,17 +74,17 @@ def audit(backend: Path = SERVER, frontend: Path = CLIENT) -> dict:
         methods = {
             item.name: item for item in node.body
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and item.name in {'do_' + v for v in VERBS} | {'check_session', 'send_json'}
+            and item.name in {'do_' + verb for verb in VERBS} |
+            {'check_session', 'send_json'}
         }
-        active = [v for v in VERBS if 'do_' + v in methods]
+        active = [verb for verb in VERBS if 'do_' + verb in methods]
         if not active:
             continue
         routes = {}
         calls = {}
         for verb in active:
             method = methods['do_' + verb]
-            paths = _literal_route_conditions(method, declared)
-            routes[verb] = sorted(paths)
+            routes[verb] = sorted(_literal_route_conditions(method, reviewed))
             calls[verb] = _method_calls(method)
         handlers.append({
             'verbs': sorted(active),
@@ -101,12 +95,11 @@ def audit(backend: Path = SERVER, frontend: Path = CLIENT) -> dict:
         })
     if len(handlers) > 12:
         raise HandlerAuditError('Nombre de handlers HTTP inattendu')
-
-    classified = set()
-    for h in handlers:
-        for paths in h['conditional_routes'].values():
-            classified.update(paths)
-    missing = sorted(declared - classified)
+    classified = {
+        path for handler in handlers
+        for routes in handler['conditional_routes'].values() for path in routes
+    }
+    missing = sorted(reviewed - classified)
     return {
         'format': 'cerato-live-handler-map-v1',
         'backend_hash': base['server_sha256'],
@@ -115,6 +108,7 @@ def audit(backend: Path = SERVER, frontend: Path = CLIENT) -> dict:
         'candidate_count': len(handlers),
         'unclassified_known_routes': missing,
         'unclassified_count': len(missing),
+        'unreviewed_route_count': len(discovered - EXPECTED_ROUTES),
         'source_code_exported': False,
         'network_changes': False,
         'warning': 'Correspondance syntaxique seulement. Conditions, héritage, ordre '
