@@ -72,7 +72,10 @@ class AuthStore:
         if self.path.is_symlink():
             raise AuthError("Base d'authentification symbolique refusée.")
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self._secretbox = SecretBox(self.path.parent / "mfa-encryption.key")
+        key_file = self.path.parent / "mfa-encryption.key"
+        if self.path.is_file() and self.path.stat().st_size > 0 and not key_file.exists():
+            raise AuthError("Clé MFA absente pour une base existante : restauration SSH requise.")
+        self._secretbox = SecretBox(key_file)
         self._init()
 
     @contextmanager
