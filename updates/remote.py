@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -62,10 +63,14 @@ def _parse_version(version: str):
 def _base(url: str) -> str:
     if not isinstance(url,str) or len(url)>1024 or any(ord(c)<32 for c in url):
         raise DistributionError("Adresse de distribution invalide")
-    parsed=urllib.parse.urlsplit(url)
+    try:
+        parsed=urllib.parse.urlsplit(url)
+        port=parsed.port
+    except ValueError as exc:
+        raise DistributionError("Adresse HTTPS mal formée") from exc
     if (parsed.scheme!="https" or not parsed.hostname or parsed.username is not None or
         parsed.password is not None or parsed.query or parsed.fragment or
-        parsed.port not in (None,443) or "%2f" in parsed.path.lower() or
+        port not in (None,443) or "%2f" in parsed.path.lower() or
         ".." in parsed.path.split("/") or "\\" in parsed.path):
         raise DistributionError("Distribution HTTPS invalide")
     if parsed.path and not parsed.path.startswith("/"):
@@ -143,7 +148,7 @@ def _channel_index(base_url: str, channel: str, key: Path, transport=None, now=N
             issued>when+300 or expires<=when):
             raise DistributionError("Index expiré ou daté incorrectement")
         return payload
-    except (PackageError,ValueError,TypeError,KeyError) as exc:
+    except (PackageError,ValueError,TypeError,KeyError,OSError,subprocess.TimeoutExpired) as exc:
         raise DistributionError("Index signé invalide") from exc
 
 
