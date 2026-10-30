@@ -81,3 +81,6 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   .metric-grid{grid-template-columns:1fr}.section{padding:12px;overflow-x:auto}.table{min-width:500px}
   .form-panel{padding:20px}.auth-layout{padding:14px 0}
 }
+
+/* Temporary MFA seed and one-time recovery codes */
+.secret-key{background:#09121e;border:1px dashed #42617c;border-radius:9px;padding:15px;color:#d4f0ff;line-height:1.7;letter-spacing:.075em;word-break:break-all;white-space:pre-wrap;user-select:all;margin:5px 0 2px}
