@@ -4,7 +4,7 @@
  * All privileged permission checks happen on the server, never in this file.
  */
 const app = document.getElementById('app');
-const state = { account: null, csrf: '', view: 'dashboard', status: null, accounts: [] };
+const state = { account: null, csrf: '', view: 'dashboard', status: null, accounts: [], updateInfo: null };
 
 function node(tag, className, textValue) {
   const el = document.createElement(tag);
@@ -327,8 +327,31 @@ function profileView(main) {
     }));
 }
 function updatesView(main) {
-  const area = section('Centre de mises à jour', 'La distribution signée et la mise à jour groupée des agents sont en préparation.');
-  area.append(paragraph('Aucune commande de mise à jour réseau n’est disponible depuis cette version de développement. Le bouton sera activé uniquement après validation du moteur de signature, des sauvegardes, des tests et du retour arrière.'));
+  const area = section('Centre de mises à jour', 'Vérification cryptographique des releases locales. L’installation reste désactivée pendant le développement.');
+  const data = state.updateInfo;
+  const grid = node('div','data-grid');
+  grid.append(card('Version installée', data?.installed_version || 'Non suivie','État du panneau'),
+              card('Canal', data?.channel || 'Stable','Stable / Bêta'),
+              card('Release disponible',data?.available_version || 'Indisponible','Archive du VPS de build'));
+  area.append(grid);
+  const indicator = node('div','update-verify', data?.verified
+      ? '✓ Signature Ed25519 et SHA-256 vérifiés'
+      : data?.reason || 'Aucune release vérifiée chargée');
+  if (data?.verified) indicator.classList.add('verified');
+  area.append(indicator);
+  if (data?.reason) area.append(paragraph(data.reason));
+  area.append(button('Vérifier les mises à jour', async () => {
+    try {
+      state.updateInfo = await api('/api/updates/check','POST',{});
+      renderPanel();
+      notify(state.updateInfo.verified ? 'Release signée vérifiée.' : 'Aucune mise à jour installable pour le moment.');
+    } catch(e) { notify(e.message,true); }
+  }, 'button primary'));
+  const blocked = button('Installer sur le panneau et les machines', () => {}, 'button');
+  blocked.disabled = true;
+  blocked.title = 'Activation après tests de sauvegarde, rollback et déploiement des agents';
+  area.append(blocked);
+  area.append(paragraph('La publication est réalisée sur le VPS de build. Aucune installation ni action distante n’est possible dans ce mode de développement.'));
   main.appendChild(area);
 }
 function renderPanel() {
