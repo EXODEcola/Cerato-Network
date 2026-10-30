@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from mfa import generate_secret, code_for_counter, verify as verify_totp, enrollment_uri, recovery_codes, consume_recovery
+from secretbox import SecretBox, SecretBoxError
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
@@ -71,6 +72,7 @@ class AuthStore:
         if self.path.is_symlink():
             raise AuthError("Base d'authentification symbolique refusée.")
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._secretbox = SecretBox(self.path.parent / "mfa-encryption.key")
         self._init()
 
     @contextmanager
@@ -246,7 +248,8 @@ class AuthStore:
                 mf = db.execute("SELECT * FROM mfa WHERE account_id=?", (row["id"],)).fetchone()
                 if mf is None:
                     secret = generate_secret()
-                    db.execute("INSERT INTO mfa(account_id,secret) VALUES(?,?)", (row["id"], secret))
+                    db.execute("INSERT INTO mfa(account_id,secret) VALUES(?,?)",
+                               (row["id"], self._secretbox.seal(secret, row["id"])))
                     mf = db.execute("SELECT * FROM mfa WHERE account_id=?", (row["id"],)).fetchone()
                 # A password alone NEVER creates an administrator session.
                 challenge = secrets.token_urlsafe(40)
@@ -259,8 +262,9 @@ class AuthStore:
                 answer = {"mfa_required": True, "mfa_setup": not bool(mf["enabled"]),
                           "challenge": challenge}
                 if not mf["enabled"]:
-                    answer["otp_secret"] = mf["secret"]
-                    answer["otp_uri"] = enrollment_uri(mf["secret"], row["email"])
+                    plain_secret = self._secretbox.open(mf["secret"], row["id"])
+                    answer["otp_secret"] = plain_secret
+                    answer["otp_uri"] = enrollment_uri(plain_secret, row["email"])
                 return answer
             return self._make_session(db, row, now)
 
@@ -298,7 +302,8 @@ class AuthStore:
             if not row or row["expires_at"] < now or not row["active"] or row["attempts"] >= 5:
                 raise InvalidCredentials("Code de vérification invalide ou expiré.")
             db.execute("UPDATE mfa_challenges SET attempts=attempts+1 WHERE tokenhash=?", (_digest(challenge),))
-            step = verify_totp(row["secret"], code, at=now, last_counter=row["last_counter"])
+            step = verify_totp(self._secretbox.open(row["secret"], row["account_id"]),
+                               code, at=now, last_counter=row["last_counter"])
             recovery_used = False
             if step is None and row["enabled"]:
                 recovery = db.execute("SELECT codehash FROM mfa_recovery WHERE account_id=?",
