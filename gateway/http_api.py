@@ -82,7 +82,7 @@ def status_payload():
                 raw = snapshot.get("dump", "")
                 live = {}
                 for line in raw.strip().splitlines()[1:]:
-                    fields = line.split("\\t")
+                    fields = line.split("\t")
                     if len(fields) >= 7:
                         live[fields[0]] = {"last_handshake": int(fields[4]),
                                            "received": int(fields[5]),
