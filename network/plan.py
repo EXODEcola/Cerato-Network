@@ -149,16 +149,10 @@ class Plan:
         for m in sorted(self.publications.values(),key=lambda x:(x.public_ip,x.protocol,x.public_port)):
             dest=self.peers[m.peer].private_ip
             lines.append(f'    iifname "{self.wan}" ip daddr {m.public_ip} {m.protocol} dport {m.public_port} dnat to {dest}:{m.destination_port}')
-        lines += [
-            "  }",
-            "  chain forward {",
-            "    type filter hook forward priority -30; policy accept;",
-            f'    iifname "{self.wan}" oifname "{self.tunnel}" ct status dnat accept',
-            f'    iifname "{self.wan}" oifname "{self.tunnel}" drop',
-            f'    iifname "{self.tunnel}" oifname "{self.wan}" ct state established,related accept',
-            "  }",
-            "}",
-        ]
+        # Intentionally NO FORWARD/INPUT/OUTPUT policy: a generic DNAT match
+        # must not introduce a blanket forwarding bypass. Per-publication
+        # forwarding rules require a separate, reviewed firewall adapter.
+        lines += ["  }", "}"]
         return "\n".join(lines)+"\n"
 
     def serializable(self):
