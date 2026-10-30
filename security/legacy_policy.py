@@ -18,6 +18,7 @@ VIEWER={
     ("GET","/api/status"),
     ("GET","/api/auth/me"),
     ("POST","/api/auth/logout"),
+    ("PATCH","/api/auth/me"),
 }
 ADMIN_READ={
     ("GET","/api/session"),
@@ -46,7 +47,6 @@ ADMIN_WRITE={
     ("POST","/api/updates/install"),
     ("POST","/api/updates/rollback"),
     ("POST","/api/updates/stage"),
-    ("PATCH","/api/auth/me"),
 }
 ACCOUNT={
     ("GET","/api/accounts"),
