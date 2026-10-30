@@ -101,7 +101,9 @@ git pull --ff-only origin feature/secure-accounts
 sudo bash scripts/enable-live-updates.sh --check
 ~~~
 
-Le mode `--check` ne modifie pas le service. Si la vérification détecte un autre élément incompatible, ne pas passer à `--install` ; relever le message exact et corriger les ancres avant déploiement. Les tests de CERATO-BUILD-01 sont une étape obligatoire préalable à l'installation.
+Le mode `--check` ne modifie pas le service. Un second échec a signalé `Table des pages incompatible` : la table des pages avait elle aussi changé. **Ce contrôle a été retiré** et la page Mises à jour est maintenant branchée sur le point d'entrée `render()` en préservant entièrement la table de pages existante. Les clics sont gérés par délégation, sans réécriture de la navigation historique.
+
+Si un autre élément est incompatible, ne pas passer à `--install` ; relever le message exact et corriger les ancres avant déploiement. Les tests de CERATO-BUILD-01 sont une étape obligatoire préalable à l'installation.
 
 ## 5. Configuration de la confiance de signature : opération unique
 
