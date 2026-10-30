@@ -71,7 +71,7 @@ def patch_backend(source:str)->str:
     # Preserve the exact indentation found on the installed handler. Legacy
     # variants differ (12 vs 16 spaces) but the route expression must match.
     get_pattern=re.compile(
-        r"^(?P<indent> {8,24})if p=='/api/status': return self\\.send_json\\(200,netstate\\(\\)\\)[ \\t]*$",
+        r"^(?P<indent> {8,24})if p=='/api/status': return self\.send_json\(200,netstate\(\)\)[ \t]*$",
         re.MULTILINE,
     )
     matches=list(get_pattern.finditer(source))
@@ -79,7 +79,7 @@ def patch_backend(source:str)->str:
         raise UpgradePatchError('Handler GET actuel incompatible')
     indent=matches[0].group('indent')
     get_anchor=matches[0].group(0)
-    inserted=indent+"if p=='/api/updates': return self.send_json(200,live_update('status'))\\n"+get_anchor
+    inserted=indent+"if p=='/api/updates': return self.send_json(200,live_update('status'))\n"+get_anchor
     source=source.replace(get_anchor,inserted,1)
     post_anchor="            if p=='/api/peers':"
     if source.count(post_anchor)!=1 or "if not self.check_session(write=True)" not in source:
