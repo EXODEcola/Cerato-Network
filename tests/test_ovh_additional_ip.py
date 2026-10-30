@@ -95,7 +95,7 @@ class AdditionalIPTests(unittest.TestCase):
     def test_routed_mode_is_advertised_but_never_applied(self):
         result=ipctl.preview("54.37.165.151","routed-wg")
         self.assertFalse(result["supported"])
-        self.assertIn("agent Windows",result["reason"])
+        self.assertIn("agent Linux",result["reason"])
         self.assertFalse(any(x[:4]==("ip","-4","address","add") for x in self.commands))
 
     def test_reject_public_address_when_owned_by_nat_mapping(self):
