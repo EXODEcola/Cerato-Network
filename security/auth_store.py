@@ -234,6 +234,15 @@ class AuthStore:
             for k in keys:
                 db.execute("DELETE FROM failed_logins WHERE key=?", (k,))
             if row["role"] in ("owner", "admin"):
+                # Bound challenges per account as well as wrong codes per challenge.
+                # A stolen password must not permit unlimited TOTP guessing.
+                issue_key = "mfa-issue:" + str(row["id"])
+                quota = db.execute("SELECT attempts,since FROM failed_logins WHERE key=?",
+                                   (issue_key,)).fetchone()
+                if quota and now - quota["since"] < 900 and quota["attempts"] >= 6:
+                    db.commit()
+                    raise InvalidCredentials("Connexion temporairement limitée.")
+                self._failed(db, issue_key, now)
                 mf = db.execute("SELECT * FROM mfa WHERE account_id=?", (row["id"],)).fetchone()
                 if mf is None:
                     secret = generate_secret()
@@ -317,6 +326,8 @@ class AuthStore:
                 db.execute("UPDATE mfa SET enabled=1,last_counter=? WHERE account_id=?",
                            (step, row["account_id"]))
             db.execute("DELETE FROM mfa_challenges WHERE account_id=?", (row["account_id"],))
+            db.execute("DELETE FROM failed_logins WHERE key=?",
+                       ("mfa-issue:" + str(row["account_id"]),))
             self._audit(db, "mfa-verified", row["account_id"])
             result = self._make_session(db, {
                 "id": row["account_id"], "email": row["email"], "role": row["role"],
