@@ -67,6 +67,17 @@ class AdditionalIPTests(unittest.TestCase):
             self.assertNotIn("flush",argv)
             self.assertFalse(len(argv)>3 and argv[:3]==("ip","-4","route") and argv[3] in ("add","del","replace","flush"))
 
+    def test_migrate_existing_pool_only_if_ip_is_present(self):
+        self.addresses.add("54.37.165.151")
+        cfg=json.loads(self.config.read_text(encoding="utf8"))
+        cfg["pool"]=["54.37.165.151","8.8.8.8"]
+        self.config.write_text(json.dumps(cfg),encoding="utf8")
+        result=ipctl.adopt_existing_pool()
+        self.assertEqual(result["adopted"],["54.37.165.151"])
+        self.assertEqual(result["ignored_absent"],["8.8.8.8"])
+        self.assertTrue(ipctl.state_read()["local_ipv4"][0]["preexisting"])
+        self.assertFalse(any(x[:4]==("ip","-4","address","add") for x in self.commands))
+
     def test_preexisting_alias_not_deleted_when_unmanaged(self):
         self.addresses.add("54.37.165.151")
         ipctl.import_local("54.37.165.151")
