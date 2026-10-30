@@ -39,8 +39,8 @@ TAG_COMMIT="$(git rev-parse "refs/tags/$VERSION^{commit}")"
   echo "HEAD ne correspond pas au tag approuvé $VERSION." >&2; exit 1;
 }
 
-if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-  echo "Changements locaux suivis par Git : release refusée." >&2
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "Changements locaux détectés : release refusée." >&2
   exit 1
 fi
 
@@ -49,13 +49,22 @@ if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
   exit 1
 fi
 
-echo "Tests complets pour le tag signé $VERSION..."
-source "$ROOT/.venv/bin/activate"
-bash "$ROOT/scripts/test-on-vps.sh"
+# A signed Git tag identifies an exact committed tree. Only that tree must be
+# tested and packaged; NEVER package arbitrary checkout files or ignored data.
+WORKTREE="$(mktemp -d -t cerato-approved-tag-XXXXXXXX)"
+cleanup() { rm -rf -- "$WORKTREE"; }
+trap cleanup EXIT
 
-# Packaging occurs only AFTER tests, without any private signing key.
-python "$ROOT/tools/release_pipeline.py" prepare \
-  --source "$ROOT" --output "$OUTPUT" --version "$VERSION"
+echo "Extraction isolée du tag signé $VERSION..."
+git archive --format=tar "$VERSION" | tar -xf - -C "$WORKTREE"
+
+echo "Tests complets sur les fichiers exacts du tag approuvé..."
+source "$ROOT/.venv/bin/activate"
+bash "$WORKTREE/scripts/test-on-vps.sh"
+
+# The approved snapshot, not the git working directory, becomes the ZIP.
+python "$WORKTREE/tools/release_pipeline.py" prepare \
+  --source "$WORKTREE" --output "$OUTPUT" --version "$VERSION"
 
 echo "Archive sans signature préparée dans $OUTPUT."
 echo "La revue et la signature sont des étapes séparées sous une identité autorisée."
