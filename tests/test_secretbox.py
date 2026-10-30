@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"security"))
-from auth_store import AuthStore
+from auth_store import AuthStore, AuthError
 from secretbox import SecretBox, SecretBoxError
 
 
@@ -45,6 +45,13 @@ class MFASecretEncryptionTests(unittest.TestCase):
         changed=payload[:-1]+("A" if payload[-1]!="A" else "B")
         with self.assertRaises(SecretBoxError):
             box.open(changed,4)
+
+    def test_missing_key_never_silently_rotates_existing_database(self):
+        key=self.path.parent/"mfa-encryption.key"
+        key.unlink()
+        with self.assertRaises(AuthError):
+            AuthStore(self.path)
+        self.assertFalse(key.exists())
 
     def test_reject_insecure_or_symlinked_keys(self):
         key=self.path.parent/"mfa-encryption.key"
