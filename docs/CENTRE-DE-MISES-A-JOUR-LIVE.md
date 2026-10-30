@@ -81,6 +81,28 @@ L'installation ajoute le nouveau service `cerato-network-update.service`, mais n
 
 **Au premier lancement, la page affichera “Distribution non configurée”** : c'est normal, puisque la source HTTPS de release et la clé publique officielle ne sont pas encore déployées. Le bouton Installer est désactivé. Cela ne prouve pas que la mise à jour distante complète fonctionne.
 
+### Correctif JavaScript du 30 octobre 2026
+
+Après correction de la table des pages, le RISE-1 a rencontré une nouvelle erreur
+`SyntaxError: Invalid or unexpected token` sur une ligne contenant `\\n`.
+Le générateur Python produisait par erreur des caractères antislash + n dans
+le fichier JavaScript, au lieu de véritables retours à la ligne.
+
+Le correctif remplace cet échappement par des sauts de ligne réels.
+La suite `tests/test_live_update_center.py` inclut désormais
+`test_full_generated_javascript_is_valid_in_node`, qui soumet les fichiers
+JavaScript **entiers** produits par le patch à `node --check`.
+
+Les deux tentatives `--check` et `--install` ayant échoué lors du préflight,
+le service Web existant n'a pas été remplacé pendant ces essais.
+
+La validation de la nouvelle révision doit être faite dans cet ordre :
+1. Sur CERATO-BUILD-01 : `bash scripts/update-dev.sh` jusqu'à `OK`.
+2. Sur RISE-1 : `git pull --ff-only origin feature/secure-accounts` puis
+   `sudo bash scripts/enable-live-updates.sh --check`.
+3. Exécuter `--install` seulement si les contrôles réussissent et avec
+   la console de secours OVH accessible.
+
 ### Compatibilité avec le panneau Additional IPv4 déjà installé
 
 Le premier essai du 30 octobre 2026 a échoué pendant le préflight `patch_live_update_center.py` :
