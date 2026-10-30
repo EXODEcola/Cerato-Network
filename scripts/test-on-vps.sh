@@ -11,6 +11,9 @@ if [[ "${EUID}" -eq 0 ]]; then
 fi
 python3 --version
 python3 -m compileall -q security gateway network updates tools tests
+for script in scripts/*.sh; do
+  bash -n "$script"
+done
 if command -v node >/dev/null 2>&1; then
   node --check web/app.js
 else
