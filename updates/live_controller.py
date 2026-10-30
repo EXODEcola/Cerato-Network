@@ -190,10 +190,28 @@ def _web_ok():
         return False
 
 
+# Critical invariant: runtime peer counters/handshakes are NOT configuration.
+# Compare the persistent source of truth instead, before and after a Web update.
+# A live handshake must never cause a false rollback.
+NETWORK_CONFIG_FILES=(
+    Path("/etc/cerato-network/config.json"),
+    Path("/etc/wireguard/wg-cerato.conf"),
+)
+
+
 def _network_fingerprint():
-    blob=json.loads(_cmd("/usr/local/sbin/ceratoctl","status"))
-    return {key:blob.get(key) for key in
-            ("wan_if","wg_if","wg_port","gateway_tunnel_ip","pool","peers","mappings")}
+    digest=hashlib.sha256()
+    for path in NETWORK_CONFIG_FILES:
+        if path.is_symlink() or not path.is_file():
+            raise UpdateError("Configuration réseau absente ou symbolique")
+        info=path.stat()
+        if info.st_size<=0 or info.st_size>2_000_000:
+            raise UpdateError("Taille de configuration réseau invalide")
+        digest.update(str(path).encode("utf8"))
+        digest.update(b"\\x00")
+        digest.update(path.read_bytes())
+        digest.update(b"\\x00")
+    return digest.hexdigest()
 
 
 def status():
