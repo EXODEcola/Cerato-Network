@@ -74,26 +74,42 @@ def status_payload():
         result = {k: data.get(k) for k in (
             "wan_if", "wg_if", "wan_ips", "pool", "wg_port", "gateway_tunnel_ip",
             "gateway_public_key", "publications") if k in data}
-        # Use WireGuard's actual status rather than showing an invented
-        # connected/disconnected state based on a config field.
+        # No 'wg show dump': it may reveal the gateway interface private
+        # key. Dedicated read-only sudo privileges permit only these views.
         tunnel_active = False
         try:
-            tunnel = subprocess.run(["sudo", "-n", CTL, "tunnel"],
-                                    capture_output=True, text=True, timeout=5, check=False)
-            if tunnel.returncode == 0:
-                snapshot = json.loads(tunnel.stdout)
-                tunnel_active = bool(snapshot.get("active"))
-                raw = snapshot.get("dump", "")
-                live = {}
-                for line in raw.strip().splitlines()[1:]:
+            wg_binary = os.environ.get("CERATO_WG_BIN", "/usr/bin/wg")
+            wg_iface = str(data.get("wg_if", "wg-cerato"))
+            if wg_iface != "wg-cerato":
+                raise ValueError("WireGuard interface not authorized in this preview")
+            handshake = subprocess.run(
+                ["sudo", "-n", wg_binary, "show", wg_iface, "latest-handshakes"],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            if handshake.returncode == 0:
+                tunnel_active = True
+                latest = {}
+                for line in handshake.stdout.strip().splitlines():
                     fields = line.split("\t")
-                    if len(fields) >= 7:
-                        live[fields[0]] = {"last_handshake": int(fields[4]),
-                                           "received": int(fields[5]),
-                                           "sent": int(fields[6])}
+                    if len(fields) == 2:
+                        latest[fields[0]] = int(fields[1])
+                transfer = subprocess.run(
+                    ["sudo", "-n", wg_binary, "show", wg_iface, "transfer"],
+                    capture_output=True, text=True, timeout=5, check=False,
+                )
+                counters = {}
+                if transfer.returncode == 0:
+                    for line in transfer.stdout.strip().splitlines():
+                        fields = line.split("\t")
+                        if len(fields) == 3:
+                            counters[fields[0]] = (int(fields[1]), int(fields[2]))
                 for peer in peers.values():
-                    peer.update(live.get(peer.get("pubkey"), {}))
-        except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
+                    key = peer.get("pubkey")
+                    if key in latest:
+                        peer["last_handshake"] = latest[key]
+                    if key in counters:
+                        peer["received"], peer["sent"] = counters[key]
+        except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, IndexError):
             pass
         result.update(peers=peers, tunnel_active=tunnel_active,
                       dashboard_mode="live")
