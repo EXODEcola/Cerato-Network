@@ -17,6 +17,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "security"))
 from auth_store import AuthStore
+from mfa import code_for_counter
 
 class GatewayHTTPTests(unittest.TestCase):
     @classmethod
@@ -98,6 +99,15 @@ class GatewayHTTPTests(unittest.TestCase):
         status,body,headers = self.request("POST","/api/auth/login",{
             "email":"owner@example.org","password":"temporary-owner-password-123"})
         self.assertEqual(status,200,body)
+        self.assertTrue(body["mfa_required"])
+        self.assertNotIn("Set-Cookie", headers)  # Password alone grants no privileged session.
+        status,_,_ = self.request("GET","/api/accounts")
+        self.assertEqual(status,401)
+        status,body,headers = self.request("POST","/api/auth/mfa/verify",{
+            "challenge":body["challenge"],
+            "code":code_for_counter(body["otp_secret"],int(time.time())//30)})
+        self.assertEqual(status,200,body)
+        self.assertEqual(len(body["recovery_codes"]),8)
         owner_cookie=headers["Set-Cookie"].split(";",1)[0]
         owner_csrf=body["csrf"]
 
