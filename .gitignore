@@ -1,0 +1,47 @@
+# Fichiers sensibles (jamais dans Git)
+.env
+.env.*
+!.env.example
+*.key
+*.p12
+*.pfx
+*.secret
+*.token
+*.pem
+secrets/
+private/
+credentials/
+**/web-auth.json
+**/ceratocl.json
+**/wg*.conf
+**/release-signing.key
+**/github.token
+**/update.json
+
+# Artefacts générés sur le VPS de build
+dist/
+artifacts/
+releases/
+*.zip
+*.tar.gz
+*.tar.zst
+*.tgz
+*.deb
+*.rpm
+*.sig
+*.sha256
+
+# Environnements, caches et logs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+build/
+!.gitkeep
+coverage/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
