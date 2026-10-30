@@ -43,7 +43,7 @@ class GatewayPolicyTests(unittest.TestCase):
     def test_viewer_cannot_mutate_network_or_accounts_or_updates(self):
         s = self.viewer_s
         for route in ("/api/peers", "/api/enroll/token", "/api/nat/add", "/api/ip/remove",
-                      "/api/accounts", "/api/updates/install", "/api/updates/rollback"):
+                      "/api/accounts", "/api/updates/install", "/api/updates/rollback", "/api/updates/stage"):
             with self.assertRaises(Forbidden):
                 authorize(self.store, s["session"], "POST", route, csrf=s["csrf"])
 
