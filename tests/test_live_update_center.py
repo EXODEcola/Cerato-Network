@@ -176,7 +176,7 @@ class LiveUpdateCenterTests(unittest.TestCase):
     def test_missing_distribution_is_not_signature_failure(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
-            with patch.object(ctl,"STORE",root),patch.object(ctl,"STATE",root/"state.json"),\\
+            with patch.object(ctl,"STORE",root),patch.object(ctl,"STATE",root/"state.json"),\
                  patch.object(ctl,"SETTING",root/"missing.json"):
                 result=ctl.check()
                 self.assertFalse(result["configured"])
