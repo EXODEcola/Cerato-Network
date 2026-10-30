@@ -180,7 +180,7 @@ document.addEventListener('click',async function(event){
     return;
   }
 """
-    source=source.replace(render_anchor,interactivity+"\\n"+UPDATES_JS+"\\n"+screen_override)
+    source=source.replace(render_anchor,interactivity+"\n"+UPDATES_JS+"\n"+screen_override)
     return source
 
 
