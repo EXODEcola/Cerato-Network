@@ -158,7 +158,7 @@ fonctions suivantes :
 - distribution/signature des releases depuis le VPS de build et mise à jour
   **depuis la page Web** sans commande Git sur chaque panneau ;
 - routage direct de l'Additional IPv4 vers un agent Dell **Ubuntu 24.04**
-  (AllowedIPs côté WireGuard, IPv4 /32 sur Windows, routes aller/retour,
+  (AllowedIPs côté WireGuard, IPv4 /32 sur Ubuntu 24.04, routes aller/retour,
   anti-spoofing, forwarding, nftables, tests end-to-end et rollback) ;
 - complétude des actions du pare-feu, gestion des agents et état des updates.
 
