@@ -93,6 +93,7 @@ if [[ "$MODE" == "--rollback" ]]; then
   exit 0
 fi
 
+[[ "$EUID" -eq 0 ]] || die "sudo requis (même pour --check : la configuration existante est protégée)."
 require_layout
 TMP="$(mktemp -d -t cerato-inplace-upgrade-XXXXXXXX)"
 trap 'rm -rf -- "$TMP"' EXIT
@@ -131,6 +132,13 @@ restore_web() {
   cp -p "$DIR/app.js" "$APP_HOME/web/app.js" || true
   if [[ "$OLD_IPCTL_PRESENT" -eq 1 ]]; then
     cp -p "$DIR/ipctl" "$IPCTL" || true
+  else
+    rm -f "$IPCTL"
+  fi
+  if [[ -f "$DIR/additional-sudoers" ]]; then
+    cp -p "$DIR/additional-sudoers" "$SUDOERS" || true
+  else
+    rm -f "$SUDOERS"
   fi
   systemctl restart "$SERVICE" || true
 }
