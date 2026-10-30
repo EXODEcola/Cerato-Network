@@ -81,7 +81,12 @@ install -d -o root -g root -m 0700 /var/lib/cerato-network-updates
 install -m 0644 "$ROOT/tools/build_release.py" "$ENGINE/tools/build_release.py"
 install -m 0644 "$ROOT/updates/remote.py" "$ENGINE/updates/remote.py"
 install -m 0755 "$ROOT/updates/live_controller.py" "$ENGINE/updates/live_controller.py"
-ln -s "$ENGINE/updates/live_controller.py" "$CTL"
+cat > "$CTL" <<'WRAPPER'
+#!/bin/sh
+# Only a fixed, root-owned controller; no arguments or URLs from the Web.
+exec /usr/bin/python3 /opt/cerato-network/updater/updates/live_controller.py "$@"
+WRAPPER
+chmod 0755 "$CTL"
 
 cat > "/etc/systemd/system/$UPDATE_SERVICE" <<'UNIT'
 [Unit]
@@ -115,6 +120,8 @@ rollback(){
     cp -p "$BACKUP/$file" "$HOME_DIR/$file" || true
   done
   systemctl restart "$WEB_SERVICE" || true
+  rm -f "$SUDOERS" "/etc/systemd/system/$UPDATE_SERVICE" "$CTL"
+  systemctl daemon-reload || true
 }
 trap rollback ERR
 
