@@ -1,4 +1,4 @@
-# Fichiers sensibles (jamais dans Git)
+# Secrets et données d'exploitation
 .env
 .env.*
 !.env.example
@@ -18,10 +18,12 @@ credentials/
 **/github.token
 **/update.json
 
-# Artefacts générés sur le VPS de build
+# Packages générés et stockage local du VPS de build
 dist/
 artifacts/
 releases/
+build/output/
+build/cache/
 *.zip
 *.tar.gz
 *.tar.zst
@@ -31,15 +33,13 @@ releases/
 *.sig
 *.sha256
 
-# Environnements, caches et logs
+# Caches et traces
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
 venv/
 node_modules/
-build/
-!.gitkeep
 coverage/
 *.log
 *.tmp
