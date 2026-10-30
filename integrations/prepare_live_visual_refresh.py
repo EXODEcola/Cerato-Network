@@ -80,7 +80,7 @@ def prepare(source:Path,destination:Path,baseline:Path=BASELINE,theme:Path=THEME
     if len(patched_app)>LIMIT or len(stylesheet)+len(theme_bytes)+2>LIMIT:
         raise VisualPatchError("Fichiers patchés trop volumineux")
     prepared={
-        "backend/server.py":backend,
+        # Never put the private RISE-1 backend in a visual release staging tree.
         "web/app.js":patched_app,
         "web/style.css":stylesheet+b"\n\n"+theme_bytes,
     }
