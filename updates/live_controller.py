@@ -220,8 +220,16 @@ def status():
 
 
 def check():
-    config,key=_settings()
     state=_state()
+    # A fresh installation has no official release distribution yet.
+    # This is a normal "not configured" state, not a failed signature.
+    try:
+        config,key=_settings()
+    except (UpdateError,OSError,ValueError,KeyError):
+        state["last_result"]="Aucune source HTTPS de releases signées n'est encore configurée."
+        state["state"]="unconfigured"
+        _save(state)
+        return status()
     result=download_channel(config["base_url"],config["channel"],key,CACHE,
                             installed_version=state["installed_version"])
     # The signed ZIP is allowed to be cached but NOT installed unless it has
