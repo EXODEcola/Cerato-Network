@@ -63,6 +63,20 @@ Pour les mises à jour suivantes, depuis ce même dossier : `bash scripts/update
 
 **Ces commandes ne déploient pas la passerelle.** Les 39 premiers tests publiés avant l'ajout du staging signé ont été validés par un testeur ; les tests des commits plus récents restent à exécuter sur la machine de build. Voir [le développement MFA](docs/DEPLOIEMENT.md) et la [PR en cours](https://github.com/EXODEcola/Cerato-Network/pull/1).
 
+## Tests concrets de préproduction
+
+Sur une VM de build isolée, la branche `feature/secure-accounts` permet maintenant de tester **de vrais serveurs HTTPS/HTTP locaux**, les archives signées, le téléchargement, les contrôles de santé, le rollback et une file de déploiement à deux agents logiques.
+
+```bash
+cd ~/Cerato-Network
+bash scripts/update-dev.sh
+bash scripts/test-preprod-live.sh
+```
+
+Pour tester réellement la connexion e-mail/mot de passe/2FA dans le navigateur (localhost via tunnel SSH), lancer `bash scripts/demo-login.sh` sur la VM de build. Toutes les instructions figurent dans [Tests concrets](docs/TESTS-CONCRETS.md).
+
+**Ces tests ne valent pas homologation de production** : aucun tunnel WireGuard physique, service systemd de production ou serveur Dell n'est modifié.
+
 ## Sécurité et signalement
 
 Voir [SECURITY.md](SECURITY.md). Ne jamais ouvrir une issue publique avec des clés, identifiants, journaux contenant des secrets ou détails exploitables d'une installation.
