@@ -122,6 +122,10 @@ fi
 if [[ ! -x /usr/local/sbin/ceratoctl ]]; then
   echo "REFUS : moteur existant ceratoctl introuvable." >&2; exit 1
 fi
+WG_BIN="$(command -v wg || true)"
+if [[ "$WG_BIN" != "/usr/bin/wg" && "$WG_BIN" != "/usr/sbin/wg" ]]; then
+  echo "REFUS : binaire WireGuard inattendu. Vérifier son emplacement." >&2; exit 1
+fi
 if ! id "$USER_NAME" >/dev/null 2>&1; then
   useradd --system --home "$DATA" --shell /usr/sbin/nologin "$USER_NAME"
 fi
@@ -131,9 +135,10 @@ install -d -m 0700 "$BACKUPS"
 
 # Read-only sudoers: the new Web service can never publish, remove peers,
 # edit NAT or apply firewall configurations.
-cat > "$SUDOERS" <<'SUDO'
+cat > "$SUDOERS" <<SUDO
 Defaults:ceratoview env_reset
-ceratoview ALL=(root) NOPASSWD: /usr/local/sbin/ceratoctl status, /usr/local/sbin/ceratoctl tunnel
+ceratoview ALL=(root) NOPASSWD: /usr/local/sbin/ceratoctl status
+ceratoview ALL=(root) NOPASSWD: $WG_BIN show wg-cerato latest-handshakes, $WG_BIN show wg-cerato transfer
 SUDO
 chmod 0440 "$SUDOERS"
 visudo -cf "$SUDOERS" >/dev/null
@@ -199,6 +204,7 @@ Environment=CERATO_PORT=$PORT
 Environment=CERATO_AUTH_DB=$DATA/accounts.sqlite3
 Environment=CERATO_WEB_ORIGIN=https://network.example.org
 Environment=CERATOCTL_BIN=/usr/local/sbin/ceratoctl
+Environment=CERATO_WG_BIN=$WG_BIN
 ExecStart=$CURRENT/venv/bin/python $CURRENT/gateway/http_api.py
 Restart=on-failure
 RestartSec=3
