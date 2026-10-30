@@ -108,52 +108,79 @@ def patch_frontend(source:str)->str:
     if source.count(nav_anchor)!=1:
         raise UpgradePatchError('Sidebar historique incompatible')
     source=source.replace(nav_anchor,nav_anchor+",['updates','Mises à jour','settings']")
-    # The live RISE-1 JavaScript already contains the Additional IPv4 patch,
-    # so its state declarations are not guaranteed to be byte-for-byte equal
-    # to the original standalone fixture. Inject next to the *verified* render
-    # function instead. The variable remains scoped within the existing IIFE.
+    # The existing RISE-1 UI has evolved independently of the development
+    # fixture. Do NOT rewrite its screen-to-function table; injecting into
+    # the verified render boundary preserves every existing page.
     render_anchor="function render(){if(!live)return;"
     if source.count(render_anchor)!=1:
         raise UpgradePatchError('Rendu du panneau incompatible')
-    source=source.replace(render_anchor,"let updateInfo=null;\n"+UPDATES_JS+'\n'+render_anchor)
-    map_old="{overview,ips,machines,nat,firewall,topology,logs,settings}[screen]"
-    if source.count(map_old)!=1:
-        raise UpgradePatchError('Table des pages incompatible')
-    source=source.replace(map_old,
-                          "{overview,ips,machines,nat,firewall,topology,logs,settings,updates}[screen]")
-    anchor="document.querySelectorAll('[data-screen]').forEach(b=>b.onclick=()=>{screen=b.dataset.screen;render()});"
-    new="""document.querySelectorAll('[data-screen]').forEach(b=>b.onclick=async()=>{
-      screen=b.dataset.screen;
-      if(screen==='updates'){
-        try{updateInfo=await req('/api/updates')}catch(e){toast(e.message,true)}
-      }
-      render()
-    });"""
-    if source.count(anchor)!=1:
-        raise UpgradePatchError('Navigation Web incompatible')
-    source=source.replace(anchor,new)
-    bind_anchor="const r=$('#refresh-btn');if(r)r.onclick=refresh;"
-    add="""const r=$('#refresh-btn');if(r)r.onclick=refresh;
-    if($('#updates-check'))$('#updates-check').onclick=async()=>{
-      try{
-        toast('Vérification de la source de mises à jour signées...');
-        updateInfo=await req('/api/updates/check','POST',{});
-        render();toast(updateInfo.installable?'Release compatible préparée.':updateInfo.last_result||'Aucune release compatible.');
-      }catch(e){toast(e.message,true)}
-    };
-    if($('#updates-install'))$('#updates-install').onclick=async()=>{
-      if(!updateInfo?.installable)return;
-      if(!window.confirm('Installer la release signée '+updateInfo.available_version+' ? Le panneau Web redémarrera brièvement; les tunnels restent actifs.'))return;
-      try{
-        const result=await req('/api/updates/install','POST',{});
-        toast(result.message||'Mise à jour lancée');
-        updateInfo.installable=false;render();
-        setTimeout(()=>location.reload(),12000);
-      }catch(e){toast(e.message,true)}
-    };"""
-    if source.count(bind_anchor)!=1:
-        raise UpgradePatchError('Liaison des boutons incompatible')
-    source=source.replace(bind_anchor,add)
+    if "function bind(" not in source or "shell(" not in source:
+        raise UpgradePatchError('Fonctions shell/bind du panneau introuvables')
+    # Attach click handlers using delegation: the original bind() function
+    # can vary without causing brittle code replacements.
+    interactivity=r"""
+let updateInfo=null,updateLoading=false;
+async function refreshUpdateInfo(){
+  if(updateLoading)return;
+  updateLoading=true;
+  try{
+    updateInfo=await req('/api/updates');
+  }catch(error){
+    updateInfo={configured:false,installable:false,
+      last_result:error.message||'Impossible de lire les mises à jour'};
+  }finally{
+    updateLoading=false;
+    if(screen==='updates')render();
+  }
+}
+document.addEventListener('click',async function(event){
+  const button=event.target.closest('#updates-check,#updates-install');
+  if(!button)return;
+  event.preventDefault();
+  if(button.id==='updates-check'){
+    if(updateLoading)return;
+    updateLoading=true;
+    button.disabled=true;
+    try{
+      updateInfo=await req('/api/updates/check','POST',{});
+      toast(updateInfo.installable?'Release signée compatible prête.':updateInfo.last_result||'Aucune release compatible.');
+    }catch(error){
+      toast(error.message,true);
+    }finally{
+      updateLoading=false;
+      if(screen==='updates')render();
+    }
+    return;
+  }
+  if(!updateInfo?.installable)return;
+  if(!window.confirm('Installer la release signée '+updateInfo.available_version+
+    ' ? Le panneau redémarrera; les tunnels existants seront conservés.'))return;
+  button.disabled=true;
+  try{
+    const response=await req('/api/updates/install','POST',{});
+    toast(response.message||'Mise à jour lancée');
+    updateInfo.installable=false;
+    render();
+    setTimeout(()=>location.reload(),12000);
+  }catch(error){
+    toast(error.message,true);
+    button.disabled=false;
+  }
+},true);
+"""
+    # render() calls shell() and bind() the same way as existing screens,
+    # but leaves the legacy navigation and all its other routes untouched.
+    screen_override="""function render(){if(!live)return;
+  if(screen==='updates'){
+    if(!updateInfo&&!updateLoading){
+      Promise.resolve().then(refreshUpdateInfo);
+    }
+    shell(updates());
+    bind();
+    return;
+  }
+"""
+    source=source.replace(render_anchor,interactivity+"\\n"+UPDATES_JS+"\\n"+screen_override)
     return source
 
 
