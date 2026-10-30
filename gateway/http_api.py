@@ -280,7 +280,7 @@ class Handler(BaseHTTPRequestHandler):
             if match:
                 target = int(match.group(1))
                 if method == "PATCH":
-                    fields = {k: body[k] for k in ("email", "role", "active", "new_password") if k in body}
+                    fields = {k: body[k] for k in ("email", "role", "active", "new_password", "reset_mfa") if k in body}
                     return self.json(200, {"account": STORE.manage_account(actor, target, **fields)})
                 if method == "DELETE":
                     STORE.delete_account(actor, target)
