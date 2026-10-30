@@ -45,3 +45,14 @@ coverage/
 *.tmp
 .DS_Store
 Thumbs.db
+
+# Bases locales et environnements de test
+.dev/
+.local/
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+coverage.xml
