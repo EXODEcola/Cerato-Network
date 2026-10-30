@@ -8,12 +8,12 @@
 
 | Module | Périmètre | État |
 |---|---|---|
-| Accès propriétaire / administrateurs / utilisateurs | Initialisation via code SSH, Argon2id, sessions, RBAC | Moteur de comptes en PR, intégration HTTP et 2FA à terminer |
+| Accès propriétaire / administrateurs / utilisateurs | Initialisation via code SSH, Argon2id, sessions, RBAC | Connexion HTTP et TOTP intégrées dans la PR, validation de sécurité et migration à terminer |
 | Tunnel WireGuard | Pairing, clés créées localement, télémétrie, handshake | Prototype existant à rendre générique |
 | Adresses IPv4 | Pool, vérification des IP fournies par l'opérateur | Prototype, configuration opérateur manuelle |
 | NAT | Publication TCP/UDP contrôlée vers les pairs | Prototype, règles firewall avancées non finalisées |
 | Supervision | État, trafic RX/TX, version des agents, dernière activité | Interface de développement, agent à finaliser |
-| Mises à jour | Versions signées, stable/bêta, rollback, déploiement par vagues | Architecture documentée, orchestration non opérationnelle |
+| Mises à jour | Versions signées, stable/bêta, rollback, déploiement par vagues | Catalogue Web et staging signés en PR, activation production non opérationnelle |
 | Gestion des comptes | Propriétaire protégé, co-admins, comptes lecture seule | Implémentation de base en PR |
 
 ### Principes fondamentaux
@@ -50,16 +50,18 @@ Agents installés sur les nœuds connectés (mise à jour contrôlée)
 
 La branche `main` est la base documentaire publique et la branche `feature/secure-accounts` contient la première implémentation des comptes, des permissions et des tests. Voir [la proposition en cours](https://github.com/EXODEcola/Cerato-Network/pull/1).
 
-Les modules d'authentification peuvent être testés séparément depuis cette branche :
+Sur une machine **de développement isolée** (pas un RISE-1 ou une passerelle de production) :
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r security/requirements.txt
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+git clone https://github.com/EXODEcola/Cerato-Network.git
+cd Cerato-Network
+git switch feature/secure-accounts
+bash scripts/bootstrap-dev.sh
 ```
 
-**Ces commandes ne déploient pas la passerelle.** L'intégration du moteur existant, les tests fonctionnels HTTP, la gestion du 2FA et le durcissement des mises à jour doivent être validés avant tout usage réel.
+Pour les mises à jour suivantes, depuis ce même dossier : `bash scripts/update-dev.sh`. **Ne jamais recloner un dépôt à l'intérieur de lui-même.**
+
+**Ces commandes ne déploient pas la passerelle.** Les 39 premiers tests publiés avant l'ajout du staging signé ont été validés par un testeur ; les tests des commits plus récents restent à exécuter sur la machine de build. Voir [le développement MFA](docs/DEPLOIEMENT.md) et la [PR en cours](https://github.com/EXODEcola/Cerato-Network/pull/1).
 
 ## Sécurité et signalement
 
