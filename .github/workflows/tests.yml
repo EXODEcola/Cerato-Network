@@ -1,0 +1,38 @@
+name: Cerato Network - Tests de developpement
+
+on:
+  push:
+    branches: [feature/secure-accounts]
+  pull_request:
+    branches: [main, feature/secure-accounts]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cerato-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-and-compatibility:
+    name: Auth, API, reseau simule et compatibilite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: security/requirements.txt
+      - name: Installer les dependances de test (CI seulement)
+        run: python -m pip install -r security/requirements.txt
+      - name: Syntaxe Python
+        run: python -m compileall -q security gateway network updates tools tests integrations integration
+      - name: Lancer toutes les suites unitaires
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Syntaxe JavaScript
+        run: node --check web/app.js
