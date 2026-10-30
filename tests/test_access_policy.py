@@ -1,5 +1,6 @@
 """Permissions must be enforced on the server, not by hidden UI controls."""
 import sys
+import time
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "security"))
 
 from auth_store import AuthStore, Forbidden
+from mfa import code_for_counter
 from access_policy import authorize, required_permission
 
 
@@ -16,7 +18,10 @@ class GatewayPolicyTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.store = AuthStore(Path(self.tmp.name) / "private" / "accounts.db")
         self.store.setup_owner(self.store.issue_bootstrap_token(), "main@cerato.test", "owner-password-example")
-        owner_s = self.store.login("main@cerato.test", "owner-password-example", "127.0.0.1")
+        challenge = self.store.login("main@cerato.test", "owner-password-example", "127.0.0.1")
+        self.assertTrue(challenge["mfa_required"])
+        owner_s = self.store.complete_mfa(challenge["challenge"],
+                                         code_for_counter(challenge["otp_secret"], int(time.time()) // 30))
         owner = self.store.actor(owner_s["session"])
         self.store.create_account(owner, "user@cerato.test", "viewer-password-example", "user")
         self.owner_s = owner_s
