@@ -153,7 +153,7 @@ def preview(ip,mode="local-nat"):
             "supported":mode=="local-nat",
             "reason":("Configuration locale persistante sans restart, avec NAT existant"
                       if mode=="local-nat" else
-                      "Nécessite un agent Windows sur la machine, validation aller/retour et rollback; pas encore activé")}
+                      "Nécessite un agent Linux sur la machine, validation aller/retour et rollback; pas encore activé")}
 
 
 def import_local(ip):
