@@ -294,6 +294,15 @@ function accountsView(main) {
           } catch(e) { notify(e.message,true); }
         }, 'button small danger')
       );
+      if (acc.role === 'admin') {
+        buttons.append(button('Réinitialiser 2FA',async()=>{
+          if (!confirm('Réinitialiser le 2FA de ' + acc.email + ' ? Toutes ses sessions seront révoquées.')) return;
+          try {
+            await api('/api/accounts/' + acc.id,'PATCH',{reset_mfa:true});
+            notify('2FA réinitialisé. Le compte devra réactiver sa double authentification.');
+          } catch(e) { notify(e.message,true); }
+        },'button small'));
+      }
     } else buttons.append(node('span', '', 'Compte courant'));
     tr.append(buttons);
     table.appendChild(tr);
