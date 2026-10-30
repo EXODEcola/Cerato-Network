@@ -34,9 +34,16 @@ class MandatoryMFATests(unittest.TestCase):
         start=self.db.login("owner@example.org","my-very-long-owner-password","127.0.0.1")
         for _ in range(5):
             with self.assertRaises(InvalidCredentials):
-                self.db.complete_mfa(start["challenge"],"000000")
+                self.db.complete_mfa(start["challenge"],"invalid-code")
         with self.assertRaises(InvalidCredentials):
             self.db.complete_mfa(start["challenge"],code_for_counter(start["otp_secret"],int(time.time())//30))
+
+    def test_password_cannot_generate_unlimited_otp_challenges(self):
+        for _ in range(6):
+            step=self.db.login("owner@example.org","my-very-long-owner-password","127.0.0.1")
+            self.assertTrue(step["mfa_required"])
+        with self.assertRaises(InvalidCredentials):
+            self.db.login("owner@example.org","my-very-long-owner-password","127.0.0.1")
 
     def test_single_use_recovery_and_replay_protection(self):
         first=self.db.login("owner@example.org","my-very-long-owner-password","127.0.0.1")
