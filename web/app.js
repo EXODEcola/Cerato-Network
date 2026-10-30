@@ -113,6 +113,10 @@ function renderUnauth(initialized) {
        input('Mot de passe', 'password', 'password', 'Ton mot de passe')],
       'Se connecter', async d => {
         const result = await api('/api/auth/login', 'POST', { email:d.email, password:d.password });
+        if (result.mfa_required) {
+          renderMfaChallenge(result);
+          return;
+        }
         state.account = result.account;
         state.csrf = result.csrf;
         await showPanel();
@@ -121,6 +125,74 @@ function renderUnauth(initialized) {
   const footer = paragraph('Accès administrateur sécurisé par HTTPS · Aucun compte préconfiguré', 'auth-footer');
   wrap.append(brand, detail, panel, footer);
   app.appendChild(wrap);
+}
+function renderMfaChallenge(challenge) {
+  app.replaceChildren();
+  const shell = node('main', 'auth-layout');
+  shell.append(node('div', 'auth-brand', '◈ CERATO NETWORK'));
+  const box = node('section', 'form-panel');
+  const isSetup = Boolean(challenge.mfa_setup);
+  box.append(node('h1', '', isSetup ? 'Configurer le double facteur' : 'Vérification de sécurité'),
+             paragraph(isSetup
+               ? 'Compte privilégié : ajoute cette clé dans une application d’authentification. Aucun accès administrateur n’est accordé avant la validation.'
+               : 'Saisis le code à 6 chiffres de ton application, ou un code de récupération personnel.'));
+  if (isSetup) {
+    const key = node('pre', 'secret-key', challenge.otp_secret || '');
+    box.append(node('div', 'field-label', 'Clé TOTP à enregistrer'), key,
+               paragraph('Tu peux aussi utiliser ce lien avec une application TOTP compatible :'));
+    const uri = node('input', 'textinput');
+    uri.value = challenge.otp_uri || '';
+    uri.readOnly = true;
+    uri.setAttribute('aria-label', 'Lien otpauth');
+    box.append(uri);
+  }
+  const verifyForm = node('form', 'form');
+  const otp = input('Code TOTP ou récupération', 'code', 'text',
+                    isSetup ? '000000' : 'Code à 6 chiffres ou récupération');
+  verifyForm.append(otp);
+  const action = node('button', 'button primary', 'Vérifier et continuer');
+  action.type = 'submit';
+  verifyForm.append(action);
+  verifyForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    action.disabled = true;
+    try {
+      const code = otp.querySelector('input').value.trim();
+      const result = await api('/api/auth/mfa/verify','POST',
+                               {challenge:challenge.challenge,code});
+      state.account = result.account;
+      state.csrf = result.csrf;
+      if (result.recovery_codes) {
+        renderRecoveryCodes(result.recovery_codes);
+      } else {
+        await showPanel();
+      }
+    } catch(error) {
+      notify(error.message,true);
+    } finally {
+      action.disabled = false;
+    }
+  });
+  box.append(verifyForm,button('Retour à la connexion', () => renderUnauth(true), 'button small'));
+  shell.append(box);
+  app.append(shell);
+}
+function renderRecoveryCodes(codes) {
+  app.replaceChildren();
+  const shell = node('main', 'auth-layout');
+  const panel = node('section','form-panel');
+  panel.append(node('h1','','Sauvegarder tes codes de récupération'),
+               paragraph('Ils sont affichés une seule fois. Stocke-les hors du serveur, dans un gestionnaire de mots de passe. Chaque code ne fonctionne qu’une fois.'));
+  const pre = node('pre','secret-key',codes.join('\n'));
+  const save = button('Copier les codes',async () => {
+    try { await navigator.clipboard.writeText(codes.join('\n')); notify('Codes copiés. Conserve-les en lieu sûr.'); }
+    catch (_) { notify('Copie non disponible : sélectionne manuellement les codes.',true); }
+  });
+  panel.append(pre,save,button('J’ai sauvegardé mes codes',async () => {
+    await showPanel();
+  },'button primary'));
+  shell.append(node('div','auth-brand','◈ CERATO NETWORK'),panel);
+  app.append(shell);
 }
 function menuButton(text, view) {
   const b = button(text, () => { state.view = view; renderPanel(); }, 'nav-item' + (state.view === view ? ' selected' : ''));
