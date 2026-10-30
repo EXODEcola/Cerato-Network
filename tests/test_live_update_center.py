@@ -109,6 +109,31 @@ class LiveUpdateCenterTests(unittest.TestCase):
                 self.assertIn("bind();",result)
                 self.assertEqual(result.count("document.addEventListener('click'"),1)
 
+    def test_full_generated_javascript_is_valid_in_node(self):
+        # Regression: the RISE-1 preflight failed at an injected literal
+        # backslash-n (\\n) on line 102. Parse the WHOLE output, not just
+        # individually assembled JS fragments.
+        with tempfile.TemporaryDirectory(prefix="cerato-render-js-") as folder:
+            variants = (
+                APP_SAMPLE,
+                APP_SAMPLE.replace(
+                    "{overview,ips,machines,nat,firewall,topology,logs,settings}[screen]",
+                    "{ overview, ips, machines, nat, firewall, topology, logs, settings }[screen]"
+                ),
+            )
+            for index, original in enumerate(variants):
+                with self.subTest(variant=index):
+                    generated=patch_frontend(original)
+                    self.assertNotIn("\\\\nfunction updates()",generated)
+                    self.assertIn("\\nfunction updates()",generated)
+                    output=Path(folder)/f"generated-{index}.js"
+                    output.write_text(generated,encoding="utf8")
+                    checked=subprocess.run(
+                        ["node","--check",str(output)],capture_output=True,text=True,
+                        timeout=10,check=False
+                    )
+                    self.assertEqual(checked.returncode,0,checked.stderr)
+
     def test_bad_layout_refused(self):
         with self.assertRaises(UpgradePatchError):
             patch_backend("def foo(): pass")
