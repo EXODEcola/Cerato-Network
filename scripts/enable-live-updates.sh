@@ -54,6 +54,12 @@ node --check "$TMP/web/app.js"
 # Verify existing service/network status WITHOUT revealing private keys.
 STATUS_BEFORE="$(/usr/local/sbin/ceratoctl status)"
 printf '%s' "$STATUS_BEFORE" | python3 -c 'import json,sys;s=json.load(sys.stdin);print("Peers:",list(s.get("peers",{})),"Pool:",s.get("pool",[]),"NAT:",len(s.get("mappings",[])))'
+# Detect unauthorized changes to the persistent network configuration without
+# relying on live handshake timestamps, which can legitimately change.
+[[ -f /etc/cerato-network/config.json && -f /etc/wireguard/wg-cerato.conf ]] || {
+  echo "Configuration réseau de référence absente : refus." >&2; exit 1;
+}
+NETWORK_DIGEST_BEFORE="$(sha256sum /etc/cerato-network/config.json /etc/wireguard/wg-cerato.conf | sha256sum | cut -d' ' -f1)"
 echo "Préflight de mise à jour Web : OK"
 if [[ "$MODE" == "--check" ]]; then
   echo "Aucun service ou fichier système n'a été modifié."
@@ -133,8 +139,10 @@ sleep 1
 systemctl is-active --quiet "$WEB_SERVICE"
 curl -fsS --max-time 8 -o /dev/null http://127.0.0.1:8787/
 STATUS_AFTER="$(/usr/local/sbin/ceratoctl status)"
-[[ "$STATUS_BEFORE" == "$STATUS_AFTER" ]] || {
-  echo "État de configuration réseau modifié pendant le déploiement." >&2; exit 1;
+printf '%s' "$STATUS_AFTER" | python3 -c 'import json,sys;json.load(sys.stdin)'
+NETWORK_DIGEST_AFTER="$(sha256sum /etc/cerato-network/config.json /etc/wireguard/wg-cerato.conf | sha256sum | cut -d' ' -f1)"
+[[ "$NETWORK_DIGEST_BEFORE" == "$NETWORK_DIGEST_AFTER" ]] || {
+  echo "Fichiers de configuration réseau modifiés pendant le déploiement." >&2; exit 1;
 }
 trap - ERR
 echo "Mises à jour Web intégrées au panneau existant 8787."
