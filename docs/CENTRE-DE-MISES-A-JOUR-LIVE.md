@@ -81,6 +81,28 @@ L'installation ajoute le nouveau service `cerato-network-update.service`, mais n
 
 **Au premier lancement, la page affichera “Distribution non configurée”** : c'est normal, puisque la source HTTPS de release et la clé publique officielle ne sont pas encore déployées. Le bouton Installer est désactivé. Cela ne prouve pas que la mise à jour distante complète fonctionne.
 
+### Compatibilité avec le panneau Additional IPv4 déjà installé
+
+Le premier essai du 30 octobre 2026 a échoué pendant le préflight `patch_live_update_center.py` :
+
+~~~text
+error: Structure frontend actuelle inconnue
+~~~
+
+Le backend actuel et son service principal `cerato-network-web.service` sont restés actifs. Le patch a été corrigé pour ne plus dépendre de l'ancienne déclaration exacte des variables JavaScript : il ajoute son état près du point d'entrée `render()`, dont l'unicité est contrôlée. Un nouveau test couvre le frontend déjà modifié par l'import IPv4.
+
+La commande `--chec` était une faute de frappe : l'option correcte est `--check`.
+
+Après récupération du correctif, exécuter **d'abord** :
+
+~~~bash
+cd ~/Cerato-Network
+git pull --ff-only origin feature/secure-accounts
+sudo bash scripts/enable-live-updates.sh --check
+~~~
+
+Le mode `--check` ne modifie pas le service. Si la vérification détecte un autre élément incompatible, ne pas passer à `--install` ; relever le message exact et corriger les ancres avant déploiement. Les tests de CERATO-BUILD-01 sont une étape obligatoire préalable à l'installation.
+
 ## 5. Configuration de la confiance de signature : opération unique
 
 Après avoir déployé un **vrai serveur HTTPS de releases** et créé une paire de signature Ed25519 sous un compte isolé :
