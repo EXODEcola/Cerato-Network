@@ -1,0 +1,226 @@
+/* CERATO NETWORK — Graphite Operations
+   Neutral operations console inspired by industrial router UIs.
+   Safe append-only layer: preserves the existing page layouts and behavior.
+   Do not show internal style names, versions or design iterations in the UI. */
+:root {
+  color-scheme: dark;
+  --bg: #0f1114;
+  --nav: #171a1e;
+  --panel: #1b1f23;
+  --panel2: #24292e;
+  --border: #353a3f;
+  --text: #e9edf0;
+  --muted: #a3acb4;
+  --accent: #78b09f;
+  --accent2: #9bd1bc;
+  --red: #e58f8f;
+  --green: #7bc4a3;
+  --cerato-surface: #1b1f23;
+  --cerato-surface-raised: #23282d;
+  --cerato-surface-nav: #171a1e;
+  --cerato-outline: #353b40;
+  --cerato-font-muted: #a2acb4;
+  --cerato-interactive: #81b8a7;
+  --cerato-warning: #d4b173;
+}
+html { color-scheme: dark; }
+body {
+  background: #101215;
+  color: var(--text);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .002em;
+}
+:where(.sidebar, aside.sidebar) {
+  background: #171a1e;
+  border-right: 1px solid #343a3f;
+  box-shadow: none;
+}
+:where(.topbar, .top-bar, header.topbar, header.header) {
+  background: #171a1e;
+  border-bottom: 1px solid #333a40;
+  box-shadow: none;
+}
+:where(.logo, .brand, .brand-name) {
+  color: #f0f3f5;
+  text-shadow: none;
+  font-weight: 760;
+  letter-spacing: .04em;
+}
+:where(.nav-label, .sidebar-label, .menu-label, .nav-group-title) {
+  color: #818c93;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .105em;
+  font-weight: 700;
+}
+:where(.nav-item, .nav-link, .sidebar a, [data-screen]) {
+  color: #b7bec4;
+  border-radius: 5px;
+  transition: background-color .12s ease, color .12s ease;
+}
+:where(.nav-item, .nav-link, .sidebar a, [data-screen]):hover {
+  color: #f2f5f6;
+  background: #272d31;
+}
+:where(.nav-item.selected, .nav-item.active, .nav-link.active, .sidebar .active, [data-screen].active) {
+  color: #f2f5f6;
+  background: #2b3235;
+  box-shadow: inset 3px 0 #78b09f;
+  border-color: transparent;
+}
+:where(.main, .main-content, .content) {
+  color: #e9edf0;
+}
+:where(.page-title, h1) {
+  font-weight: 680;
+  letter-spacing: -.026em;
+}
+:where(.section, .card, .panel, .metric-card, .metric, .infobox, .data-card,
+       .box, .settings-card, .form-panel) {
+  background: #1b1f23;
+  border: 1px solid #353b40;
+  box-shadow: none;
+  border-radius: 7px;
+  color: #e9edf0;
+}
+:where(.section, .panel) > :where(h2, h3):first-child {
+  color: #e7eced;
+  font-weight: 680;
+  letter-spacing: -.01em;
+}
+:where(.metric-card, .metric) {
+  background: #20252a;
+  border-color: #353b40;
+  border-radius: 7px;
+}
+:where(.metric-label, .metric small, .metric-title, .hint, .screen-sub,
+       .muted, .muted-note, .disclaimer, .field-label) {
+  color: #9faab2;
+}
+:where(.metric-value, .metric strong) {
+  color: #eef1f2;
+  font-weight: 690;
+  letter-spacing: -.025em;
+}
+:where(.infobox, .info-box, .information) {
+  background: #22292a;
+  border: 1px solid #40534d;
+  color: #cfddd7;
+}
+:where(.infobox) a { color: #b3d9cc; }
+:where(.btn, .btn2, .button, button:not(.nav-item):not(.nav-link)) {
+  background: #2c3338;
+  border: 1px solid #4a535a;
+  color: #e9eef0;
+  border-radius: 5px;
+  font-weight: 580;
+  text-shadow: none;
+  box-shadow: none;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+:where(.btn, .btn2, .button, button:not(.nav-item):not(.nav-link)):hover:not(:disabled) {
+  background: #374046;
+  border-color: #6b8580;
+  color: #fff;
+  box-shadow: none;
+}
+:where(.btn.primary, .btn2.primary, .button.primary, button.primary) {
+  background: #42695e;
+  border-color: #689b88;
+  color: #f3f8f5;
+}
+:where(.btn.primary, .btn2.primary, .button.primary, button.primary):hover:not(:disabled) {
+  background: #507c6d;
+  border-color: #98ccb7;
+}
+:where(button:disabled, .button:disabled, .btn:disabled, .btn2:disabled) {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.18);
+}
+:where(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid #9bcdb7;
+  outline-offset: 2px;
+}
+:where(input, select, textarea, .textinput, .search-input) {
+  background: #14181b;
+  color: #ebeff1;
+  border: 1px solid #495157;
+  border-radius: 5px;
+  box-shadow: none;
+}
+:where(input, select, textarea, .textinput):focus {
+  border-color: #82b5a2;
+}
+:where(input, textarea)::placeholder { color: #8b969e; }
+:where(.table, table) {
+  color: #e4e9eb;
+  border-collapse: collapse;
+}
+:where(.table, table) thead,
+:where(.table, table) th {
+  background: #24292d;
+  color: #b9c3c9;
+  border-color: #3d454b;
+  font-size: 11px;
+  text-transform: none;
+  font-weight: 670;
+  letter-spacing: .018em;
+}
+:where(.table, table) td {
+  border-color: #353b40;
+}
+:where(.table, table) tbody tr:nth-child(even) {
+  background: #1e2327;
+}
+:where(.table, table) tbody tr:hover {
+  background: #29312f;
+}
+:where(.status, .badge, .pill, .role) {
+  color: #c2d7ce;
+  background: #2a3b36;
+  border: 1px solid #48675b;
+  border-radius: 4px;
+  box-shadow: none;
+}
+:where(.status.pending, .badge.pending, .status.warning, .badge.warning) {
+  color: #e3c895;
+  background: #3c3327;
+  border-color: #6c5534;
+}
+:where(.status.error, .badge.error, .status.danger) {
+  color: #e6aaa8;
+  background: #412c2e;
+  border-color: #704a4e;
+}
+:where(.notice) {
+  background: #24382f;
+  border-color: #547764;
+  border-radius: 6px;
+  box-shadow: 0 9px 28px #0008;
+}
+:where(.notice.error) {
+  background: #3d2b2e;
+  border-color: #815258;
+}
+:where(.secret-key) {
+  background: #13181a;
+  border: 1px dashed #52645a;
+  color: #dce8e1;
+}
+:where(.auth-brand, .protected) { color: #a1d0bb; }
+:where(.nav-item.selected, .nav-link.active, [data-screen].active) svg,
+:where(.nav-item.selected, .nav-link.active, [data-screen].active) i {
+  color: #a5d3c0;
+}
+:where(.section, .card, .panel, .metric-card) :where(a, .link) {
+  color: #add1c2;
+}
+@media (max-width: 840px) {
+  :where(.section, .card, .panel) { border-radius: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.nav-item, .nav-link, .btn, .btn2, button) { transition: none; }
+}
