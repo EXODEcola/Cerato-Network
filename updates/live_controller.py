@@ -255,8 +255,9 @@ def apply():
             dest.parent.mkdir(parents=True,exist_ok=True)
             dest.write_bytes(data)
         _cmd(sys.executable,"-m","py_compile",str(Path(folder)/"backend/server.py"))
-        if shutil.which("node"):
-            _cmd("node","--check",str(Path(folder)/"web/app.js"))
+        if not shutil.which("node"):
+            raise UpdateError("Node.js requis pour la validation du JavaScript")
+        _cmd("node","--check",str(Path(folder)/"web/app.js"))
     if not _web_ok():
         raise UpdateError("Le panneau existant est déjà en défaut")
     previous_network=_network_fingerprint()
