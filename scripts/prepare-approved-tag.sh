@@ -25,11 +25,21 @@ fi
   echo "Le dépôt Git est inattendu." >&2; exit 1;
 }
 
-# The tag must be signed by an already-trusted maintainer key.
-# No bypass flag; do not sign unapproved branches automatically.
+# Require an out-of-band pinned fingerprint, never learn signing trust
+# from the public repository or a freshly fetched arbitrary GPG key.
+TRUSTED_FP="${CERATO_TRUSTED_TAG_FINGERPRINT:-}"
+[[ "$TRUSTED_FP" =~ ^[A-Fa-f0-9]{40}([A-Fa-f0-9]{24})?$ ]] || {
+  echo "CERATO_TRUSTED_TAG_FINGERPRINT doit contenir l'empreinte GPG approuvée." >&2
+  exit 1
+}
+TRUSTED_FP="${TRUSTED_FP^^}"
 git fetch --tags --prune --quiet origin
-if ! git tag -v "$VERSION" >/dev/null 2>&1; then
-  echo "Tag non signé ou signature GPG du mainteneur non approuvée : $VERSION" >&2
+VERIFY_OUTPUT="$(git verify-tag --raw "$VERSION" 2>&1)" || {
+  echo "Tag non signé ou signature GPG invalide : $VERSION" >&2
+  exit 1
+}
+if ! printf '%s\n' "$VERIFY_OUTPUT" | grep -Eq "\\[GNUPG:\\] VALIDSIG ${TRUSTED_FP}([[:space:]]|$)"; then
+  echo "Signature non liée à la clé GPG explicitement approuvée." >&2
   exit 1
 fi
 
