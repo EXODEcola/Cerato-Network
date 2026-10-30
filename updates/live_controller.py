@@ -28,7 +28,7 @@ ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT/"tools"))
 sys.path.insert(0,str(ROOT/"updates"))
 from build_release import verify, PackageError
-from remote import download_channel, DistributionError, _parse_version
+from remote import check_channel, download_channel, DistributionError, _parse_version
 
 SERVICE="cerato-network-web.service"
 BASE=Path("/opt/cerato-network")
@@ -197,55 +197,83 @@ def _network_fingerprint():
 
 
 def status():
+    """Status never contacts the network nor treats unconfigured as signature failure."""
     state=_state()
     answer={"installed_version":state["installed_version"],
             "available_version":state.get("available_version"),
             "channel":None,
             "configured":False,
+            "can_check":False,
             "installable":False,
             "status":state.get("state","ready"),
+            "reason_code":state.get("reason_code","unknown"),
+            "last_checked_at":state.get("last_checked_at"),
             "last_result":state.get("last_result",""),
             "history":state.get("history",[])[-8:]}
     try:
         config,key=_settings()
-        answer["configured"]=True
-        answer["channel"]=config["channel"]
-        try:
-            answer["installable"]=_candidate(state,key) is not None
-        except (UpdateError,OSError,ValueError,zipfile.BadZipFile):
-            answer["installable"]=False
     except (UpdateError,OSError,ValueError,KeyError):
-        answer["last_result"]="Configurer une source HTTPS signée et une clé publique approuvée"
+        answer["status"]="unconfigured"
+        answer["reason_code"]="source_not_configured"
+        answer["available_version"]=None
+        answer["last_result"]="La distribution signée n'est pas encore configurée sur cette passerelle."
+        return answer
+    answer["configured"]=True
+    answer["can_check"]=True
+    answer["channel"]=config["channel"]
+    try:
+        answer["installable"]=_candidate(state,key) is not None
+    except (UpdateError,OSError,ValueError,zipfile.BadZipFile):
+        answer["installable"]=False
+    if state.get("available_version") and not answer["installable"]:
+        answer["reason_code"]="release_not_compatible"
+    elif answer["installable"]:
+        answer["reason_code"]="release_ready"
     return answer
 
 
 def check():
     state=_state()
-    # A fresh installation has no official release distribution yet.
-    # This is a normal "not configured" state, not a failed signature.
+    state["last_checked_at"]=int(time.time())
+    # A missing source is an onboarding state, not a broken signature.
     try:
         config,key=_settings()
     except (UpdateError,OSError,ValueError,KeyError):
-        state["last_result"]="Aucune source HTTPS de releases signées n'est encore configurée."
+        state["available_version"]=None
+        state["last_result"]="Distribution non configurée : source HTTPS et clé publique requises."
         state["state"]="unconfigured"
+        state["reason_code"]="source_not_configured"
         _save(state)
         return status()
-    result=download_channel(config["base_url"],config["channel"],key,CACHE,
-                            installed_version=state["installed_version"])
-    # The signed ZIP is allowed to be cached but NOT installed unless it has
-    # the exact compatible overlay files, schema and source version.
-    state["available_version"]=result["version"]
-    state["state"]="downloaded"
-    _save(state)
     try:
+        # A signed channel can legitimately announce the same version as installed.
+        latest=check_channel(config["base_url"],config["channel"],key,
+                             installed_version=state["installed_version"])
+        if not latest["update_available"]:
+            state["available_version"]=None
+            state["state"]="current"
+            state["reason_code"]="already_current"
+            state["last_result"]="Le panneau est à jour sur le canal sélectionné."
+            _save(state)
+            return status()
+        result=download_channel(config["base_url"],config["channel"],key,CACHE,
+                                installed_version=state["installed_version"])
+        state["available_version"]=result["version"]
+        state["state"]="downloaded"
         candidate=_candidate(state,key)
-        state["last_result"]=(
-            "Release signée et compatible préparée"
-            if candidate is not None else
-            "Release signée mais non compatible avec le panneau actuel"
-        )
-    except (UpdateError,ValueError,zipfile.BadZipFile):
-        state["last_result"]="Release signée mais non compatible avec le panneau actuel"
+        if candidate is None:
+            state["reason_code"]="release_not_compatible"
+            state["last_result"]="Release authentifiée, mais incompatible avec ce panneau."
+        else:
+            state["reason_code"]="release_ready"
+            state["last_result"]="Release signée, compatible et prête à installer."
+    except (DistributionError,PackageError,UpdateError,OSError,ValueError,
+            KeyError,zipfile.BadZipFile) as exc:
+        # Never show the distribution URL, keys, raw TLS errors or filesystem paths.
+        state["available_version"]=None
+        state["state"]="check_failed"
+        state["reason_code"]="release_check_failed"
+        state["last_result"]="Impossible de valider la distribution signée. Consulter le journal."
     _save(state)
     return status()
 
