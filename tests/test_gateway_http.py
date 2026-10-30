@@ -117,11 +117,6 @@ class GatewayHTTPTests(unittest.TestCase):
             cookie=owner_cookie, csrf=owner_csrf)
         self.assertEqual(status,403)
 
-        status,body,_ = self.request("POST","/api/auth/login",{
-            "email":"viewer@example.org","password":"read-only-password-123"})
-        self.assertEqual(status,200,body)
-        viewer_cookie=headers["Set-Cookie"] if False else None
-        # Response headers from a second login must be read separately.
         status,body,headers = self.request("POST","/api/auth/login",{
             "email":"viewer@example.org","password":"read-only-password-123"})
         self.assertEqual(status,200,body)
