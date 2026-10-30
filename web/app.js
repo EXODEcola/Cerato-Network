@@ -349,6 +349,15 @@ function updatesView(main) {
   if (data?.verified) indicator.classList.add('verified');
   area.append(indicator);
   if (data?.reason) area.append(paragraph(data.reason));
+  if (data?.verified && data?.staging_enabled) {
+    area.append(button('Préparer cette release (sans installation)', async () => {
+      if (!confirm('Vérifier et extraire la release signée dans le répertoire de test ? Cela ne redémarre aucun service.')) return;
+      try {
+        const staged=await api('/api/updates/stage','POST',{});
+        notify(staged.already_present ? 'Release déjà préparée : '+staged.version : 'Release préparée : '+staged.version);
+      } catch(e) { notify(e.message,true); }
+    },'button primary'));
+  }
   area.append(button('Vérifier les mises à jour', async () => {
     try {
       state.updateInfo = await api('/api/updates/check','POST',{});
