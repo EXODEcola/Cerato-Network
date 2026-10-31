@@ -45,7 +45,7 @@ CUTOVER_BLOCKERS = (
     'Anciennes routes /api/login et /api/logout rendues inaccessibles',
     'Tests HTTP bout en bout (owner/admin/user, MFA, CSRF, viewer expurgé)',
     'Migration et rollback éprouvés sur le service Web 8787',
-    'Release overlay compatible, signée et publiée via CERATO-BUILD-01',
+    'Release compatible signée via GitHub Actions et installable depuis Cerato Network sans intervenir sur CERATO-BUILD-01',
 )
 
 
