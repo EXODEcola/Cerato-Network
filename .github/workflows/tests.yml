@@ -43,3 +43,4 @@ jobs:
           bash -n scripts/finish-live-panel.sh
           bash -n scripts/upgrade-live-update-engine.sh
           bash -n scripts/enable-live-updates.sh
+          bash -n scripts/prepare-same-host-releases.sh
