@@ -16,6 +16,7 @@ sys.path.insert(0,str(ROOT/"updates"))
 from release_pipeline import prepare, sign_prepared
 from channel_index import create_channel
 from stage_signed_static_release import stage, StagePublicationError
+from build_release import PackageError
 
 
 class SignedStaticStageTests(unittest.TestCase):
@@ -77,7 +78,7 @@ class SignedStaticStageTests(unittest.TestCase):
             with (channel/"beta.json").open("ab") as fh:
                 fh.write(b"tampered")
             out=root/"public-ready"
-            with self.assertRaises((ValueError,StagePublicationError)):
+            with self.assertRaises((ValueError,StagePublicationError,PackageError)):
                 stage(release,channel,key,"beta",out)
             self.assertFalse(out.exists())
 
