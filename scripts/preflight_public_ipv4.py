@@ -163,7 +163,7 @@ def check(read, role, public_ip, tunnel, peer_ip, wan, mode, port):
             def nat_status(rules):
                 lines = [line for line in rules.splitlines()
                          if public_ip in line and "dnat" in line.lower()]
-                exact = any(re.search(r"(?<!\\d)" + str(port) + r"(?!\\d)", line)
+                exact = any(re.search(r"(?<!\d)" + str(port) + r"(?!\d)", line)
                             and peer_ip in line for line in lines)
                 report("nat_rule", "ok" if exact else "attention",
                        "Règle DNAT correspondante détectée dans nftables" if exact
