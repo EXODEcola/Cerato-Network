@@ -70,6 +70,32 @@ Aucune de ces protections n'est activée sur la machine OVH pour le moment.
 L'ancienne interface publique continue de fonctionner tant que le
 basculement et le rollback n'ont pas été revus de bout en bout.
 
+## Résultat réel du précontrôle OVH — 31 octobre 2026
+
+Le diagnostic local (sans export du code privé) confirme :
+
+- **Un** gestionnaire HTTP historique, avec des chemins GET et POST identifiés.
+- Routes API attendues présentes, sans route inconnue ni route non classifiée.
+- Les deux anciens endpoints `/api/login` et `/api/logout` sont encore actifs.
+- Une couche HTTP Basic est toujours déclarée dans Nginx.
+- `ProtectSystem=strict`, `ProtectHome=yes` et `PrivateTmp=yes`.
+- Stockage `/var/lib/cerato-network-auth` absent, et aucune exception
+  `ReadWritePaths` pour ce stockage.
+- La baseline initiale ne correspond plus aux fichiers déployés ;
+  ce fait **ne doit pas** entraîner l'acceptation automatique des nouveaux hashes.
+
+Un outil `integrations/prepare_private_auth_storage.py` permet de
+préparer **uniquement** le dossier de comptes (propriétaire `ceratonet`,
+permissions `0700`). Par défaut, `--check` ne modifie rien ;
+`--install` crée seulement le dossier s'il n'existe pas. Aucune clé,
+base SQLite, identité Owner ou session n'est créée par cet outil.
+
+Le fragment `deploy/cerato-native-auth-storage.conf` prépare une
+exception systemd de **seul** répertoire
+`ReadWritePaths=/var/lib/cerato-network-auth`. Il est **inactif** dans
+le dépôt et ne doit pas être appliqué avant la migration contrôlée.
+La création du dossier ne signifie pas que les comptes sont activés.
+
 ## Validations avant bascule
 
 1. Vérifier la **vraie structure** de l'actuel `server.py` et ses
