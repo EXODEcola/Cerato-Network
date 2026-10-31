@@ -102,6 +102,8 @@ class RoutedDryRunTests(unittest.TestCase):
         self.assertEqual(report["virtual_nat_mappings_removed"],1)
         self.assertFalse(report["ready_for_routed_ip"])
         self.assertFalse(report["network_modified"])
+        self.assertFalse(report["configuration_files_modified"])
+        self.assertFalse((self.staged/"__pycache__").exists())
         self.assertNotIn("EXAMPLE-KEY",json.dumps(report))
         after=(self.source.read_bytes(),self.config.read_bytes(),
                self.managed.read_bytes(),(self.staged/"ceratoctl").read_bytes())
