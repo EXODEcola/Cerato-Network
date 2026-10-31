@@ -66,7 +66,7 @@ class StageNativeLoginTests(unittest.TestCase):
             self.assertIn(MARKER,js)
             self.assertIn("function overview(){",js)
             self.assertIn("function nat(){",js)
-            self.assertIn("/api/auth/mfa/verify",js) if False else self.assertIn("endpoint+'mfa/verify'",js)
+            self.assertIn("endpoint+'mfa/verify'",js)
             self.assertIn("cerato-auth-dialog",css)
             self.assertEqual(output.stat().st_mode & 0o777,0o700)
             self.assertEqual((output/"web/app.js").stat().st_mode & 0o777,0o600)
