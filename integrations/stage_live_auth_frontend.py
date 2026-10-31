@@ -46,6 +46,10 @@ def stage(source_root:Path,destination:Path, *, baseline:Path=BASELINE)->dict:
     inventory=inspect(src/"backend/server.py",src/"web/app.js")
     if inventory["server_sha256"]!=base.get("server_sha256"):
         raise NativeAuthUIStageError("Empreinte backend incompatible avec RISE-1")
+    # Both files must be independently attested. A matching backend hash
+    # is insufficient when the UI changed after the last approval.
+    if inventory["frontend_sha256"]!=base.get("frontend_sha256"):
+        raise NativeAuthUIStageError("Empreinte du frontend non approuvée")
     app=_source(src/"web/app.js").decode("utf8")
     css=_source(src/"web/style.css").decode("utf8")
     if any(app.count(anchor)!=1 for anchor in REQUIRED_JS):
