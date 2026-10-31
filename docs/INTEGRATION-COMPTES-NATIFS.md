@@ -43,6 +43,33 @@ Branche : `feature/secure-accounts-ui`.
   champs de création incomplets ;
 - respect du contrôle des rôles et de la validation CSRF existants.
 
+## Raccordement au panneau historique (préparé)
+
+- L'interface native fournit un adaptateur `legacyFetch` qui transmet
+  automatiquement le **nouveau** `X-Cerato-CSRF` sur les modifications
+  `/api/` strictement internes, sans jamais l'ajouter aux URL externes
+  ou aux routes de connexion et de comptes.
+- Les requêtes GET ne sont pas transformées et aucune connexion ne peut
+  passer en écriture sans un compte validé et son jeton CSRF. Le **backend**
+  continue de vérifier lui-même la session, la permission et l'origine.
+- **Fail closed pour les lecteurs** : aucune requête User n'exécute un
+  ancien handler HTTP. Pour la vue d'ensemble, un fournisseur explicite
+  `netstate()` est projeté par `viewer_projection`, puis sérialisé par
+  le nouveau pont HTTP. Si ce fournisseur manque, l'accès est refusé.
+  C'est nécessaire car les anciens handlers pouvaient sérialiser par
+  `_json()` ou écrire directement dans le flux, contournant un filtrage
+  fondé uniquement sur `send_json()`.
+- La préparation de l'interface refuse les variantes historiques
+  sans `fetch()` et chemins API vérifiés, ainsi que toute interface
+  dont l'empreinte n'est pas approuvée.
+- Les tests utilisent un véritable mini-serveur HTTP **localhost**
+  en CI (aucune connexion à l'OVH), y compris les tentatives anonymes,
+  écritures sans CSRF, rôle User, login historique et MFA.
+
+Aucune de ces protections n'est activée sur la machine OVH pour le moment.
+L'ancienne interface publique continue de fonctionner tant que le
+basculement et le rollback n'ont pas été revus de bout en bout.
+
 ## Validations avant bascule
 
 1. Vérifier la **vraie structure** de l'actuel `server.py` et ses
