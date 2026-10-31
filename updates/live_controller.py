@@ -74,7 +74,7 @@ def _settings():
     doc=json.loads(SETTING.read_text(encoding="utf8"))
     if not isinstance(doc,dict) or set(doc)!={"base_url","channel","public_key"}:
         raise UpdateError("Paramètres de distribution invalides")
-    if doc["channel"] not in ("stable","beta"):
+    if doc["channel"] not in ("stable","beta","dev"):
         raise UpdateError("Canal de releases invalide")
     key=Path(doc["public_key"])
     if (key.is_symlink() or not key.is_file() or key.stat().st_uid!=0 or
