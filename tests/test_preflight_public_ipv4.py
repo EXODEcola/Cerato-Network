@@ -33,15 +33,15 @@ class FakeRead:
         if argv == ["ip", "link", "show", "dev", WG]:
             return "wg-cerato up"
         if argv == ["ip", "-4", "rule", "show"]:
-            return ("0: from all lookup local\\n"
-                    "1100: from 10.77.0.2 lookup 51820\\n"
-                    + ("1200: from 8.8.4.4 lookup 51820\\n" if self.public_on_peer else "")
-                    + "5210: from all fwmark 0x80000/0xff0000 lookup main\\n"
-                    + "5270: from all lookup 52\\n")
+            return ("0: from all lookup local\n"
+                    "1100: from 10.77.0.2 lookup 51820\n"
+                    + ("1200: from 8.8.4.4 lookup 51820\n" if self.public_on_peer else "")
+                    + "5210: from all fwmark 0x80000/0xff0000 lookup main\n"
+                    + "5270: from all lookup 52\n")
         if argv == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]:
-            return "2\\n"
+            return "2\n"
         if argv == ["sysctl", "-n", "net.ipv4.conf.wg-cerato.rp_filter"]:
-            return "2\\n"
+            return "2\n"
         if argv == ["ip", "-j", "-4", "addr", "show", "dev", WAN]:
             return json.dumps([{"addr_info": [
                 {"family": "inet", "local": PUB}]}] if self.public_on_wan
