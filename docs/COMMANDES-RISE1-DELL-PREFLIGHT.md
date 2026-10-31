@@ -442,3 +442,57 @@ pour retirer l'alias WAN actuel.
 Le basculement réel nécessite encore les vérifications OVHcloud,
 l'agent Dell, la politique du firewall du Dell et le rollback
 à expiration indépendant sur les deux hôtes.
+
+## Correction dry-run INPUT pool-set (31 octobre 2026)
+
+L'essai à blanc sur le RISE-1 a renvoyé
+\`INPUT drop historique absent ou dupliqué\`. L'ancien validateur
+attendait un DROP sur une IPv4 seule, mais \`render_nft\` peut émettre
+l'ensemble \`ip daddr { 54.37.165.151, ... } drop\` depuis le pool
+historique. Le correctif parse **l'ensemble littéral exact de la
+chaîne INPUT** et refuse le cas où la /32 n'est pas membre, si une
+entrée est invalide/dupliquée, ou si la protection a changé.
+
+**Attention :** la copie
+\`/tmp/cerato-routed-stage.Gwi10hKO/patched\` contient l'ancien
+\`routed_nft_inject.py\` ; elle ne doit pas être utilisée pour ce
+nouveau test. Préparer une **nouvelle** copie privée avec le module
+corrigé, sans installer quoi que ce soit sur le réseau.
+
+\`\`\`bash
+set -euo pipefail
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+REV=08db1e75ba8064208fa1b62ccdc2534311869cfa
+git cat-file -e "$REV^{commit}"
+
+git show "$REV:scripts/stage_live_routed_controller.py" > /tmp/cerato-stage-controller-fix.py
+git show "$REV:scripts/dry_run_staged_routed_controller.py" > /tmp/cerato-routed-dry-run-fix.py
+
+STAGE="$(sudo mktemp -d /tmp/cerato-routed-stage.XXXXXXXX)"
+sudo install -d -m 0700 "$STAGE/support"
+for f in live_routed_compat.py routed_nft_inject.py routed_firewall.py; do
+  git show "$REV:network/$f" | sudo tee "$STAGE/support/$f" >/dev/null
+done
+
+test "$(sudo sha256sum "$STAGE/support/routed_nft_inject.py" | cut -d' ' -f1)" \
+  = 3f60268c1532d86ddbdd873be5471948636b7455390163044d0851ffe82eb299
+
+sudo python3 /tmp/cerato-stage-controller-fix.py \
+  --source /usr/local/sbin/ceratoctl \
+  --controller-sha 41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6 \
+  --support-dir "$STAGE/support" --destination "$STAGE/patched"
+
+sudo python3 /tmp/cerato-routed-dry-run-fix.py \
+  --stage "$STAGE/patched" \
+  --public-ip 54.37.165.151 \
+  --vpn-ip 10.77.0.2 \
+  --management-ip 51.210.223.57
+\`\`\`
+
+La révision \`08db1e75...\` est précisément celle dont les tests
+CI sont réussis. Le script exige toujours le SHA-256 de
+\`ceratoctl\` original et de sa copie, ainsi que les empreintes
+des trois modules. Aucun \`nft\`, \`wg\`, \`ip\`, ni accès SSH
+n'est exécuté. La configuration reste inchangée ; ce test
+n'autorise ni installation ni basculement de l'Additional IPv4.
