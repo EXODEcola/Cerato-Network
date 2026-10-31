@@ -47,6 +47,7 @@ class SignedPublicPublisherTests(unittest.TestCase):
         with patch.object(publisher,"_trusted",return_value=("beta",Path("/tmp/test-only-key"))),\
              patch.object(publisher,"validate",return_value=(version,payload(version))),\
              patch.object(publisher,"_root"),\
+             patch.object(publisher,"_require_root_owned"),\
              patch.object(publisher,"_existing_channels",
                           side_effect=lambda root: (root/"channels",
                             self._channels_snapshot())),\
