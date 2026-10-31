@@ -60,6 +60,21 @@ class LiveUpdateStatusTests(unittest.TestCase):
             self.assertNotIn("https://",info["last_result"])
             self.assertFalse(info["installable"])
 
+    def test_signed_but_incompatible_visual_overlay_is_not_distribution_error(self):
+        with patch.object(ctl,"_state",return_value=self.state),\
+             patch.object(ctl,"_settings",return_value=(self.config,self.key)),\
+             patch.object(ctl,"_save",lambda state:None),\
+             patch.object(ctl,"check_channel",return_value={
+                 "update_available":True,"version":"v0.1.0-beta.1"}),\
+             patch.object(ctl,"download_channel",return_value={
+                 "version":"v0.1.0-beta.1","downloaded":True}),\
+             patch.object(ctl,"_candidate",side_effect=ctl.UpdateError(
+                 "Migration de cette version non autorisée")):
+            info=ctl.check()
+            self.assertEqual(info["reason_code"],"release_not_compatible")
+            self.assertFalse(info["installable"])
+            self.assertEqual(info["status"],"downloaded")
+
     def test_good_release_is_shown_only_after_compatible_overlay(self):
         with patch.object(ctl,"_state",return_value=self.state),\
              patch.object(ctl,"_settings",return_value=(self.config,self.key)),\
