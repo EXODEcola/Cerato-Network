@@ -218,6 +218,8 @@ def install(plan):
             Path(name).unlink(missing_ok=True)
         _run("nginx","-t")
         _run("systemctl","reload","nginx")
+        # TLS must remain valid for the IP after reloading the active vhost.
+        check_tls()
     except BaseException:
         if updated:
             shutil.copy2(copy,conf)
