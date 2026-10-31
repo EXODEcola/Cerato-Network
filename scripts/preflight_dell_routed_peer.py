@@ -137,9 +137,10 @@ def check(readfn,*,public_ip,vpn_ip,tunnel,table,priority):
     tailscale=read(readfn,["ip","link","show","dev","tailscale0"],lambda _ :True)
     peer_rule=from_rule_table(rules,vpn) if rules is not None else None
     public_rule=from_rule_table(rules,pub) if rules is not None else None
-    occupied=any(item[0]==priority for line in (rules or "").splitlines()
-                 for item in [re.match(r"^\s*(\d+):",line)]
-                 if item is not None) if rules is not None else None
+    occupied=(any(int(match.group(1))==priority
+                  for line in rules.splitlines()
+                  if (match:=re.match(r"^\s*(\d+):",line)))
+              if rules is not None else None)
 
     tests={
         "wg_interface_has_vpn_ip":None if wgaddrs is None else vpn in wgaddrs,
