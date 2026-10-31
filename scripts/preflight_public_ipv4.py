@@ -76,8 +76,8 @@ def source_policy_table(read, source):
     source = str(ipaddress.ip_address(source))
     for line in read(["ip", "-4", "rule", "show"]).splitlines():
         match = re.match(
-            r"^\\s*\\d+:\\s+from\\s+" + re.escape(source) +
-            r"(?:/32)?\\s+lookup\\s+([a-zA-Z0-9_-]+)(?:\\s|$)",
+            r"^\s*\d+:\s+from\s+" + re.escape(source) +
+            r"(?:/32)?\s+lookup\s+([a-zA-Z0-9_-]+)(?:\s|$)",
             line,
         )
         if match:
