@@ -49,3 +49,66 @@ Le code `network/two_host_rollback_rehearsal.py` simule les étapes, injecte une
 - Revoir les contrôles de droits OWNER/ADMIN/USER, la signature de release et le processus de déploiement.
 
 **Ne pas déployer le code actuel sur OVH ou Dell comme agent de cutover.**
+
+## Diagnostic réel après le premier essai temporaire (31 octobre 2026)
+
+Un test réel a placé temporairement `54.37.165.151/32` sur
+`wg-cerato` côté Dell, avec règle source table `51820`, puis
+l'a routée via OVH. OVH a confirmé `dev wg-cerato`.
+Malgré cela, SSH public TCP/22 depuis Windows et HTTPS sortant
+depuis la source 54.37.165.151 ont expiré.
+
+Les deux retours arrière ont ensuite fonctionné :
+`cerato-ovh-rollback.service` a renvoyé `status=0/SUCCESS`,
+la /32 s'est retrouvée sur `enp1s0f0`, et l'IP et la règle
+source temporaires ont été retirées du Dell.
+
+**Capture WAN après rollback** : les SYN TCP/22 de l'IP cliente
+`82.67.7.118` atteignent `enp1s0f0`, destination
+`54.37.165.151`. Cette observation élimine un **défaut total de
+réception** de l'Additional IPv4 chez OVH, mais ne prouve ni que
+les SYN traversaient WireGuard pendant l'essai routé, ni que le
+Dell répondait. L'absence de réponse TCP/22 **après rollback**
+est attendue : OVH porte l'IP mais la politique Cerato ne publie
+historiquement que TCP/8080.
+
+### Limitation critique des règles nftables « accept »
+
+Un `accept` dans `table ip cerato_network / chain forward` ne
+court-circuite pas les autres *base chains* du même hook. Une
+chaîne `inet ... forward` plus tardive peut encore émettre
+`drop`. Même principe pour le profil de pare-feu ciblé Dell
+et ses autres chaînes `input`. Ne pas désactiver ces autres
+chaînes à l'aveugle.
+
+Outil ajouté : `scripts/inspect_nft_forwarding_path.py`, lecture
+seule, imprime seulement les métadonnées des chaînes filtrantes
+(base hooks, priorités, politiques et nombres de verdicts) sans
+exposer les règles ou les adresses privées.
+
+Depuis **OVH** :
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show FETCH_HEAD:scripts/inspect_nft_forwarding_path.py > /tmp/cerato-nft-hooks.py
+sudo python3 /tmp/cerato-nft-hooks.py --role gateway
+```
+
+Depuis le **Dell** :
+
+```bash
+cd ~/Cerato-Network-preflight
+git fetch origin feature/public-ip-path-preflight
+git show FETCH_HEAD:scripts/inspect_nft_forwarding_path.py > /tmp/cerato-nft-hooks.py
+sudo python3 /tmp/cerato-nft-hooks.py --role peer
+```
+
+Ces deux commandes peuvent être exécutées en état NAT restauré.
+Elles sont préalables au **seul** prochain essai temporaire
+synchronisé avec capture sur WAN OVH / WG OVH / WG Dell.
+Elles ne constituent pas une preuve de blocage : le test de trafic
+doit être effectué **pendant** que l'IP est routée, en sauvegardant
+les compteurs des interfaces et les paquets SYN/SYN-ACK sur les
+deux hôtes. Aucune désactivation du pare-feu public ou des
+protections de gestion ne doit être tentée sans cette preuve.
