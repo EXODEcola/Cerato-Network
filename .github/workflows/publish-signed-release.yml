@@ -71,6 +71,8 @@ jobs:
               [[ "$REQUEST_VERSION" != *-* ]]
             fi
           fi
+      - name: Installer les dependances de test
+        run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
       - name: Tests complets AVANT signature
         shell: bash
         run: |
