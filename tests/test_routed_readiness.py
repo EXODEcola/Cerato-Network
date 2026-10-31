@@ -70,7 +70,7 @@ class ReadinessTests(unittest.TestCase):
 
     def test_fails_closed_on_no_backup_or_watchdog(self):
         g, p, r = complete()
-        out = run(r=replace(r, backup_verified=False, gateway_watchdog=False))
+        out = run(r=replace(r, backup_verified=False, watchdog_on_gateway=False))
         self.assertIn("verified_backup", out["blockers"])
         self.assertIn("gateway_watchdog", out["blockers"])
 
