@@ -70,6 +70,33 @@ def route_device(read, destination, source=None):
     return routes[0].get("dev") if routes else None
 
 
+
+def source_policy_table(read, source):
+    """Return the table of an exact IPv4 'from source' rule, never the full list."""
+    source = str(ipaddress.ip_address(source))
+    for line in read(["ip", "-4", "rule", "show"]).splitlines():
+        match = re.match(
+            r"^\\s*\\d+:\\s+from\\s+" + re.escape(source) +
+            r"(?:/32)?\\s+lookup\\s+([a-zA-Z0-9_-]+)(?:\\s|$)",
+            line,
+        )
+        if match:
+            return match.group(1)
+    return None
+
+
+def rp_filter_mode(read, tunnel):
+    """Read both global and tunnel reverse-path filters, without writing sysctl."""
+    all_mode = int(read(["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]).strip())
+    tunnel_mode = int(read([
+        "sysctl", "-n", "net.ipv4.conf." + tunnel + ".rp_filter"
+    ]).strip())
+    if any(value not in (0, 1, 2) for value in (all_mode, tunnel_mode)):
+        raise ValueError("Invalid rp_filter")
+    # Linux uses max(conf/all, conf/interface) for the effective check.
+    return {"all": all_mode, "tunnel": tunnel_mode, "effective": max(all_mode, tunnel_mode)}
+
+
 def wg_peer_state(read, tunnel, peer_ip):
     """Ne renvoie jamais les clés publiques des pairs."""
     wanted = ipaddress.ip_address(peer_ip)
@@ -176,6 +203,22 @@ def check(read, role, public_ip, tunnel, peer_ip, wan, mode, port):
                                      "ok" if present else "attention",
                                      "IPv4 WireGuard du Dell présente" if present else
                                      "IPv4 WireGuard du Dell absente"))
+        probe("vpn_source_policy", lambda: source_policy_table(read, peer_ip),
+              lambda table: report(
+                  "vpn_source_policy",
+                  "ok" if table is not None else "attention",
+                  ("Règle source VPN présente vers table " + table) if table
+                  else "Aucune règle 'from IPv4 VPN' explicite détectée"))
+
+        probe("rp_filter", lambda: rp_filter_mode(read, tunnel),
+              lambda modes: report(
+                  "rp_filter",
+                  "attention" if modes["effective"] == 1 else "ok",
+                  "Filtrage retour strict (1) : vérifier le trafic asymétrique"
+                  if modes["effective"] == 1 else
+                  ("Filtrage retour souple (2)" if modes["effective"] == 2
+                   else "Filtrage retour désactivé (0) : firewall à vérifier")))
+
         if mode == "local-nat":
             # With a pure DNAT (no source NAT on the gateway), the Dell receives
             # the real external client address. Replies must then use the WG
@@ -191,6 +234,14 @@ def check(read, role, public_ip, tunnel, peer_ip, wan, mode, port):
                       "Réponse source VPN envoyée hors WireGuard : risque "
                       "d'asymétrie sans SNAT sur la passerelle"))
         if mode == "routed-wg":
+            probe("public_source_policy",
+                  lambda: source_policy_table(read, public_ip),
+                  lambda table: report(
+                      "public_source_policy",
+                      "ok" if table is not None else "attention",
+                      ("Règle source IPv4 publique présente vers table " + table)
+                      if table else
+                      "Aucune règle de routage source pour l'IPv4 publique"))
             probe("public_on_peer",
                   lambda: public_ip in address_set(read, tunnel),
                   lambda present: report("public_on_peer",
