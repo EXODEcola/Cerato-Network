@@ -47,6 +47,9 @@ def release_info(release_dir: str = "", public_key: str = "", installed_version:
     if channel=="dev" and "-dev." not in version:
         result["reason"]="Release incompatible avec le canal Dev"
         return result
+    if channel=="beta" and "-beta." not in version:
+        result["reason"]="Release incompatible avec le canal Beta"
+        return result
     result.update(configured=True, verified=True, available_version=version,
                   artifact_size=manifest["size"], sha256=manifest["sha256"],
                   reason="Release authentifiée et vérifiée (installation non activée)")
