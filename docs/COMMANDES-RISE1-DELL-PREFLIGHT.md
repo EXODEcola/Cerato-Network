@@ -209,3 +209,31 @@ identifiants. Le champ `can_activate` reste volontairement
 être validés indépendamment. **Ne pas désactiver les services
 `cerato-network-additional-ip` ou `cerato-network-rules` avant
 la migration coordonnée**.
+
+## Inventaire du vrai contrôleur RISE-1 (lecture seule, sans secret)
+
+Le projet GitHub possède des contrats de routage et de persistance
+mais la logique active `/usr/local/sbin/ceratoctl` régénère
+`table ip cerato_network`. Avant de développer une migration
+permanente, identifier les fonctions exactes du contrôleur installé,
+sans exporter les fichiers de configuration ou les clés :
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show origin/feature/public-ip-path-preflight:scripts/inspect_live_network_engine.py \
+  > /tmp/cerato-live-engine-inspect.py
+python3 -m py_compile /tmp/cerato-live-engine-inspect.py
+sudo python3 /tmp/cerato-live-engine-inspect.py
+```
+
+L'outil n'affiche que les empreintes SHA256, la taille des sources et
+les noms des fonctions et commandes d'administration pertinentes.
+Il n'ouvre aucun port, ne change aucune IP et n'imprime pas les
+valeurs sensibles. Si les fichiers actifs sont inconnus, un
+résultat `exists=false` ou `python=false` signifie qu'il faut
+identifier la vraie implémentation avant toute migration.
+
+**Ne jamais partager** le contenu intégral de
+`/etc/cerato-network/config.json`, `/etc/wireguard/wg-cerato.conf`
+ou un dump avec clés privées.
