@@ -46,6 +46,7 @@ jobs:
           bash -n scripts/enable-live-updates.sh
           bash -n scripts/prepare-same-host-releases.sh
           bash -n scripts/init-release-signer.sh
+          bash -n scripts/enable-live-update-check.timer.sh
           bash -n scripts/prepare-approved-tag.sh
           bash -n scripts/test-on-vps.sh
 

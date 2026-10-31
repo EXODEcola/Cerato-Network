@@ -97,6 +97,16 @@ def _tls_probe(url=BASE_URL+"/channels/beta.json"):
         raise ActivationError("Certificat TLS ou connexion HTTPS invalide") from exc
 
 
+def _start_periodic_checks():
+    script=ROOT/"scripts/enable-live-update-check.timer.sh"
+    if script.is_symlink() or not script.is_file():
+        raise ActivationError("Service de surveillance signé introuvable")
+    result=subprocess.run(["/bin/bash",str(script),"--install"],
+                          capture_output=True,text=True,timeout=30,check=False)
+    if result.returncode:
+        raise ActivationError("Activation du contrôle périodique refusée : consulter journal système")
+
+
 def activate(*,install=False,public_key=None,fingerprint=None,channel="beta"):
     before=_network_snapshot()
     existing=_prerequisites()
@@ -139,12 +149,17 @@ def activate(*,install=False,public_key=None,fingerprint=None,channel="beta"):
     after=_network_snapshot()
     if before!=after:
         raise ActivationError("Configuration réseau inattendue modifiée")
+    # Read-only search for signed releases every six hours. The Web UI alone
+    # can request an actual installation after a signature check.
+    if install:
+        _start_periodic_checks()
     return {"status":result,
             "source":BASE_URL,"channel":state["channel"],
             "configured":True,"channel_http_present":published,
             "can_check":bool(state.get("can_check")),
             "installable":bool(state.get("installable")) if result=="ready" else False,
             "network_modified":False,"build_modified":False,
+            "periodic_checks_enabled":bool(install),
             "notes":"Le canal est vérifié et les versions compatibles peuvent être installées via le panneau."
              if result=="ready" else
              "Distribution non prête de bout en bout : vérifier le canal, la signature et la compatibilité."}

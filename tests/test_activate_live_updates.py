@@ -18,7 +18,10 @@ class ActivationTests(unittest.TestCase):
             "configured":True,"can_check":True,"installable":False,
             "channel":"beta"})
         self.a.start();self.b.start();self.c.start()
-        self.addCleanup(self.a.stop);self.addCleanup(self.b.stop);self.addCleanup(self.c.stop)
+        self.d=patch.object(m,"_start_periodic_checks")
+        self.d.start()
+        self.addCleanup(self.a.stop);self.addCleanup(self.b.stop)
+        self.addCleanup(self.c.stop);self.addCleanup(self.d.stop)
 
     def test_no_key_never_provisions_or_changes_network(self):
         with patch.object(m,"provision") as provision:
@@ -80,6 +83,16 @@ class ActivationTests(unittest.TestCase):
                 m.activate(install=True,public_key="/tmp/test.pub",
                            fingerprint="f"*64)
             provision.assert_not_called()
+
+    def test_one_time_activation_enables_periodic_discovery_not_install(self):
+        with patch.object(m,"provision"),\
+             patch.object(m,"_tls_probe",return_value=False),\
+             patch.object(m,"_start_periodic_checks") as monitor:
+            result=m.activate(install=True,public_key="/tmp/test.pub",
+                              fingerprint="f"*64)
+            self.assertTrue(result["periodic_checks_enabled"])
+            self.assertFalse(result["installable"])
+            monitor.assert_called_once_with()
 
     def test_no_build_or_network_mutation_api(self):
         source=(ROOT/"integrations/activate_live_updates.py").read_text()

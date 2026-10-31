@@ -78,6 +78,7 @@ TIMER_NEW=0
 rollback(){
   code=$?
   trap - ERR
+  systemctl disable --now cerato-network-update-check.timer >/dev/null 2>&1 || true
   if [[ "$SERVICE_NEW" = 1 ]]; then rm -f -- "$SERVICE"; fi
   if [[ "$TIMER_NEW" = 1 ]]; then rm -f -- "$TIMER"; fi
   systemctl daemon-reload || true
