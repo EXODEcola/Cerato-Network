@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pwd
 from pathlib import Path
 import stat
 import subprocess
@@ -55,7 +56,7 @@ def _systemd_unit(*,runner=subprocess.run):
     }
 
 
-def _auth_directory(path:Path=AUTH_STORE):
+def _auth_directory(path:Path=AUTH_STORE, *, expected_uid:int|None=None):
     # os.lstat detects an existing symlink without following it.
     try:
         st=path.lstat()
@@ -65,6 +66,13 @@ def _auth_directory(path:Path=AUTH_STORE):
         return {"state":"unavailable","requires_private_storage_setup":True}
     if not stat.S_ISDIR(st.st_mode) or st.st_mode & 0o077:
         return {"state":"unsafe_permissions","requires_private_storage_setup":True}
+    if expected_uid is None:
+        try:
+            expected_uid=pwd.getpwnam("ceratonet").pw_uid
+        except KeyError:
+            return {"state":"service_identity_unavailable","requires_private_storage_setup":True}
+    if st.st_uid!=expected_uid:
+        return {"state":"wrong_owner","requires_private_storage_setup":True}
     return {"state":"private_directory_exists","requires_private_storage_setup":False}
 
 
