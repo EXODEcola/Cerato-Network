@@ -58,7 +58,7 @@ class VisualInstallIntegrationTests(unittest.TestCase):
         def networkcheck():
             return network.pop(0)
         with patch.object(ctl.os,"geteuid",return_value=0), \
-             patch.object(ctl,"_settings",return_value=({},Path("approved.pub"))), \
+             patch.object(ctl,"_settings",return_value=({"channel":"beta"},Path("approved.pub"))), \
              patch.object(ctl,"_state",return_value=state), \
              patch.object(ctl,"_candidate",return_value=root/"mock-signed-bundle"), \
              patch.object(ctl,"_read_overlay",return_value=VISUAL), \
