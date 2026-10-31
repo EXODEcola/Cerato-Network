@@ -20,6 +20,8 @@ on:
       - 'scripts/dry_run_staged_routed_controller.py'
       - 'scripts/preflight_dell_routed_peer.py'
       - 'scripts/preflight_dell_exposure_cryptokey.py'
+      - 'scripts/inspect_nft_forwarding_path.py'
+      - 'tests/test_inspect_nft_forwarding_path.py'
       - 'tests/test_preflight_dell_exposure_cryptokey.py'
       - 'network/two_host_cutover_contract.py'
       - 'network/two_host_rollback_rehearsal.py'
@@ -66,7 +68,7 @@ jobs:
       - name: Installer les dependances de test (CI seulement)
         run: python -m pip install -r security/requirements.txt
       - name: Syntaxe Python
-        run: python -m compileall -q security gateway network updates tools tests integrations integration scripts/preflight_public_ipv4.py scripts/audit_routed_cutover_dependencies.py scripts/inspect_live_network_engine.py scripts/inspect_live_controller_semantics.py scripts/review_live_network_generators.py scripts/stage_live_routed_controller.py scripts/verify_staged_routed_controller.py scripts/dry_run_staged_routed_controller.py scripts/preflight_dell_routed_peer.py scripts/preflight_dell_exposure_cryptokey.py
+        run: python -m compileall -q security gateway network updates tools tests integrations integration scripts/preflight_public_ipv4.py scripts/audit_routed_cutover_dependencies.py scripts/inspect_live_network_engine.py scripts/inspect_live_controller_semantics.py scripts/review_live_network_generators.py scripts/stage_live_routed_controller.py scripts/verify_staged_routed_controller.py scripts/dry_run_staged_routed_controller.py scripts/preflight_dell_routed_peer.py scripts/preflight_dell_exposure_cryptokey.py scripts/inspect_nft_forwarding_path.py
       - name: Lancer toutes les suites unitaires
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Syntaxe JavaScript
