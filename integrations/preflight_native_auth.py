@@ -80,7 +80,8 @@ def summarize(backend:Path=SERVER,frontend:Path=CLIENT,baseline:Path=BASELINE,
               *,unit_checker=_systemd_unit,login_checker=nginx_layer)->dict:
     # The reports expose only fixed field names and allowlisted route labels.
     inventory=inspect(backend,frontend)
-    check=assess(inventory,_load_json(baseline))
+    baseline_data=_load_json(baseline)
+    check=assess(inventory,baseline_data)
     handler=audit(backend,frontend)
     safe_handlers=[{
         "verbs":row["verbs"],
@@ -118,6 +119,8 @@ def summarize(backend:Path=SERVER,frontend:Path=CLIENT,baseline:Path=BASELINE,
         "network_modified":False,
         "web_service_modified":False,
         "baseline_matches":check["source_hashes_match"],
+        "baseline_backend_matches":inventory.get("server_sha256")==baseline_data.get("server_sha256"),
+        "baseline_frontend_matches":inventory.get("frontend_sha256")==baseline_data.get("frontend_sha256"),
         "reviewed_routes_complete":not check["missing_known_routes"] and
             not check["unexpected_route_count"],
         "missing_known_routes":check["missing_known_routes"],
