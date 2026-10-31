@@ -14,7 +14,7 @@ on:
         required: true
         default: beta
         type: choice
-        options: [beta, stable]
+        options: [dev, beta, stable]
       from_version:
         description: "Version OVH cible, ex. v0.0.0"
         required: true
@@ -23,7 +23,8 @@ on:
   schedule:
     # Signed indexes expire after seven days. Attempt renewal every four days
     # (every Sunday / Wednesday); environment approvals may delay the job.
-    - cron: "23 4 * * 0,3"
+    - cron: "23 4 * * 0,3" # beta
+    - cron: "28 4 * * 0,3" # dev
 
 concurrency:
   group: cerato-network-signing
@@ -44,6 +45,7 @@ jobs:
       REQUEST_VERSION: ${{ inputs.version }}
       REQUEST_CHANNEL: ${{ inputs.channel }}
       REQUEST_FROM_VERSION: ${{ inputs.from_version }}
+      SCHEDULE_ENTRY: ${{ github.event.schedule }}
     steps:
       - name: Checkout du commit main approuve
         uses: actions/checkout@v4
@@ -61,9 +63,11 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
+            [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((dev|beta|rc)\.[0-9]+))?$ ]]
             [[ "$REQUEST_FROM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
-            if [[ "$REQUEST_CHANNEL" == "beta" ]]; then
+            if [[ "$REQUEST_CHANNEL" == "dev" ]]; then
+              [[ "$REQUEST_VERSION" == *-dev.* ]]
+            elif [[ "$REQUEST_CHANNEL" == "beta" ]]; then
               [[ "$REQUEST_VERSION" == *-beta.* ]]
             else
               [[ "$REQUEST_VERSION" != *-* ]]
@@ -102,11 +106,15 @@ jobs:
           KEY="$RUNNER_TEMP/cerato-trust/signing.key"
           PUB="$RUNNER_TEMP/cerato-trust/release-verification.pub"
           if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
-            CHANNEL=beta
-            VERSION="$(gh release list --limit 40 --json tagName,isPrerelease,isDraft \
-              -q '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$"))] | first // ""')"
+            if [[ "$SCHEDULE_ENTRY" == "28 4 * * 0,3" ]]; then
+              CHANNEL=dev
+            else
+              CHANNEL=beta
+            fi
+            VERSION="$(gh release list --limit 80 --json tagName,isPrerelease,isDraft \
+              -q "[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test(\"^v[0-9]+\\\\.[0-9]+\\\\.[0-9]+-${CHANNEL}\\\\.[0-9]+$\"))] | first // \"\"")"
             if [[ -z "$VERSION" ]]; then
-              echo "Aucune beta signee a renouveler."
+              echo "Aucune release $CHANNEL signee a renouveler."
               echo "CERATO_NO_RELEASE=true" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -154,7 +162,7 @@ jobs:
             options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION"
                      --notes "Release Graphite CSS signee Ed25519. Aucun backend ni JavaScript remplace."
                      --latest=false)
-            if [[ "$CHANNEL" == "beta" ]]; then options+=(--prerelease); fi
+            if [[ "$CHANNEL" == "beta" || "$CHANNEL" == "dev" ]]; then options+=(--prerelease); fi
             gh release create "$VERSION" \
               "$OUT/release/manifest.json" "$OUT/release/manifest.sig" \
               "$OUT/release/cerato-network-release.zip" \
