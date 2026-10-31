@@ -135,7 +135,7 @@ class LiveHTTPBridgeTests(unittest.TestCase):
         self.assertNotIn("private_key",request.saved)
         self.assertNotIn("peers",request.saved)
         self.assertNotIn("ip",request.saved)
-        self.assertEqual(request.calls,[("legacy-GET","/api/status"),("legacy-session",False)]) if False else None
+        self.assertEqual(request.calls,[("legacy-GET","/api/status")])
 
     def test_user_mutations_denied_before_legacy_calls(self):
         self.store.role="user"
