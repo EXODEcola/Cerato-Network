@@ -40,7 +40,6 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      SIGNING_PRIVATE_PEM: ${{ secrets.CERATO_ED25519_PRIVATE_PEM }}
       TRUSTED_PUBLIC_SHA256: ${{ vars.CERATO_SIGNING_PUBLIC_SHA256 }}
       REQUEST_VERSION: ${{ inputs.version }}
       REQUEST_CHANNEL: ${{ inputs.channel }}
@@ -58,7 +57,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SIGNING_PRIVATE_PEM"
           [[ "$TRUSTED_PUBLIC_SHA256" =~ ^[a-f0-9]{64}$ ]]
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
@@ -80,9 +78,12 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_*.py' -q
           node --check web/app.js
       - name: Installer la cle uniquement dans la machine ephemere
+        env:
+          SIGNING_PRIVATE_PEM: ${{ secrets.CERATO_ED25519_PRIVATE_PEM }}
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$SIGNING_PRIVATE_PEM"
           umask 077
           mkdir -p "$RUNNER_TEMP/cerato-trust"
           printf '%s\n' "$SIGNING_PRIVATE_PEM" > "$RUNNER_TEMP/cerato-trust/signing.key"
