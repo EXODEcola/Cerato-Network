@@ -84,9 +84,11 @@ def validate(release_dir:Path,channel_dir:Path,public_key:Path,channel:str,
         raise StagePublicationError("Empreinte du manifeste différente de l'index")
     archive_path=Path(release_dir)/BUNDLE
     with zipfile.ZipFile(archive_path) as archive:
-        found={x.filename for x in archive.infolist()
-               if x.filename.startswith(EXPECTED_OVERLAY)}
-        if found!=EXPECTED_FILES:
+        found={x.filename for x in archive.infolist()}
+        permitted=EXPECTED_FILES|{
+            "cerato-network/LICENSE","cerato-network/README.md",
+        }
+        if found!=permitted or len(archive.infolist())!=len(permitted):
             raise StagePublicationError("Seul un overlay graphique RISE-1 est publiable")
         spec=json.loads(archive.read(EXPECTED_OVERLAY+"compat.json"))
         if (not isinstance(spec,dict) or
