@@ -286,7 +286,13 @@ def check():
                                 installed_version=state["installed_version"])
         state["available_version"]=result["version"]
         state["state"]="downloaded"
-        candidate=_candidate(state,key)
+        # A cryptographically valid archive can still target a different
+        # panel version. That is a normal incompatibility, not a broken TLS
+        # provider or an invalid signature.
+        try:
+            candidate=_candidate(state,key)
+        except (UpdateError,ValueError,KeyError,zipfile.BadZipFile):
+            candidate=None
         if candidate is None:
             state["reason_code"]="release_not_compatible"
             state["last_result"]="Release authentifiée, mais incompatible avec ce panneau."
