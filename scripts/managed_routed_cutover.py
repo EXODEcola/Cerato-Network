@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from copy import deepcopy
 import datetime as datetime
 import hashlib
 import ipaddress
@@ -317,8 +318,8 @@ def prepare(role,support_dir):
         raise
 
 def planned_configs(peer_name):
-    cfg=json_read(CFG)
-    managed=json_read(STATE)
+    cfg=deepcopy(json_read(CFG))
+    managed=deepcopy(json_read(STATE))
     nat=[m for m in cfg["mappings"] if m.get("public_ip")==PUB]
     ensure(len(nat)==1,"NAT IP non unique")
     cfg["mappings"]=[m for m in cfg["mappings"] if m.get("public_ip")!=PUB]
@@ -426,7 +427,7 @@ def rollback(role):
 
 def persist(role):
     info=read_state(role)
-    ensure(info["phase"]=="active" and remaining_seconds(info)>90,
+    ensure(info["phase"]=="active" and remaining_seconds(info)>240,
            "Essai non actif ou rollback proche")
     if role=="peer":
         # Check egress using the new source. No assumptions about full-host
