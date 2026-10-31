@@ -264,3 +264,38 @@ sudo python3 /tmp/cerato-live-controller-semantics.py \
 Une empreinte différente signifie que le fichier de production a changé.
 Ne pas contourner la comparaison pour forcer un patch. Les scripts
 d'inventaire restent distincts des opérations d'installation.
+
+## Détails du générateur réel pour raccordement IPv4 /32
+
+À partir de l'inspection réelle transmise, le contrôleur
+`/usr/local/sbin/ceratoctl` possède bien `render_nft(data)`,
+`rewrite_wg_peers(data)`, `apply(data)`, et le SHA-256 suivant :
+`41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6`.
+
+Le générateur `network/routed_nft_inject.py` prépare désormais les
+autorisations ciblées vers et depuis une /32 routée en les insérant avant
+les deux DROP historiques, et conserve le DROP INPUT destiné à la
+passerelle. Les tests reproduisent la topologie observée le 31/10/2026.
+**Ce n'est pas encore un patch installé sur le contrôleur RISE-1.**
+
+Pour raccorder le code sans deviner les implémentations privées, l'outil
+ci-dessous produit un AST limité aux trois fonctions citées, avec toutes
+les chaînes littérales masquées et un contrôle du SHA avant lecture :
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show origin/feature/public-ip-path-preflight:scripts/review_live_network_generators.py \
+  > /tmp/cerato-review-generators.py
+python3 -m py_compile /tmp/cerato-review-generators.py
+
+sudo python3 /tmp/cerato-review-generators.py \
+  --controller-sha 41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6
+```
+
+L'inspection ne lance aucune fonction de `ceratoctl`, ne modifie pas
+les IP et n'imprime pas le contenu brut des fichiers. **Lire tout
+de même le rapport avant partage** : les noms de variables et
+l'architecture logicielle sont visibles même si les valeurs des
+chaînes ne le sont pas. En cas d'empreinte différente, elle refuse
+l'analyse sans réappliquer le réseau.
