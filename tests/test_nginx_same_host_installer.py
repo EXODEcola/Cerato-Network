@@ -43,7 +43,7 @@ class NginxSameHostTests(unittest.TestCase):
         matches=helper._eligible(self.path.read_text())
         self.assertEqual(len(matches),1)
         with patch.object(helper,"_run",return_value=""):
-            plan=helper.preflight(candidates=[self.path],verify_tls=False)
+            plan=helper.preflight(candidates=[self.path],verify_tls=False,trusted_root=Path(self.temp.name))
         self.assertTrue(plan["new"].count(helper.MARKER)==1)
         self.assertIn("auth_basic \"Keep API protected\"",plan["new"])
         self.assertIn("proxy_pass http://127.0.0.1:8787",plan["new"])
@@ -56,7 +56,7 @@ class NginxSameHostTests(unittest.TestCase):
         self.path.write_text(CONFIG+"\n"+CONFIG,encoding="utf8")
         with patch.object(helper,"_run",return_value=""):
             with self.assertRaises(helper.ProvisionError):
-                helper.preflight(candidates=[self.path],verify_tls=False)
+                helper.preflight(candidates=[self.path],verify_tls=False,trusted_root=Path(self.temp.name))
 
     def test_idempotence_is_fail_closed(self):
         source=CONFIG.replace("  auth_basic \"Private panel\";",
@@ -64,7 +64,7 @@ class NginxSameHostTests(unittest.TestCase):
         self.path.write_text(source,encoding="utf8")
         with patch.object(helper,"_run",return_value=""):
             with self.assertRaises(helper.ProvisionError):
-                helper.preflight(candidates=[self.path],verify_tls=False)
+                helper.preflight(candidates=[self.path],verify_tls=False,trusted_root=Path(self.temp.name))
 
     def test_symlink_resolved_but_edit_inside_etc_only(self):
         other=Path(self.temp.name)/"linked.conf"
@@ -78,7 +78,7 @@ class NginxSameHostTests(unittest.TestCase):
         with patch.object(helper,"_run",return_value=""),\
              patch.object(helper,"check_tls",side_effect=helper.ProvisionError("invalid TLS")):
             with self.assertRaisesRegex(helper.ProvisionError,"invalid TLS"):
-                helper.preflight(candidates=[self.path],verify_tls=True)
+                helper.preflight(candidates=[self.path],verify_tls=True,trusted_root=Path(self.temp.name))
         self.assertEqual(self.path.read_text(),CONFIG)
 
     def test_nginx_snippet_allows_only_signed_release_files(self):
