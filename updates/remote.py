@@ -47,6 +47,10 @@ class DistributionError(Exception):
     pass
 
 
+class DistributionNotFound(DistributionError):
+    """An expected public release URL is not published yet."""
+
+
 def _parse_version(version: str):
     if not isinstance(version,str):
         raise DistributionError("Version invalide")
@@ -116,6 +120,10 @@ def _get(url: str, max_bytes: int, transport=None) -> bytes:
             if not blob or len(blob)>max_bytes:
                 raise DistributionError("Fichier distant vide ou trop volumineux")
             return bytes(blob)
+    except urllib.error.HTTPError as exc:
+        if exc.code==404:
+            raise DistributionNotFound("Fichier de distribution non publié") from exc
+        raise DistributionError("Réponse HTTP de distribution invalide") from exc
     except (urllib.error.URLError,TimeoutError,OSError) as exc:
         raise DistributionError("Téléchargement HTTPS impossible") from exc
 

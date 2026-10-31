@@ -48,6 +48,20 @@ class LiveUpdateStatusTests(unittest.TestCase):
             self.assertEqual(info["status"],"current")
             self.assertIsInstance(info["last_checked_at"],int)
 
+    def test_absent_https_channel_is_not_a_signature_failure(self):
+        from remote import DistributionNotFound
+        with patch.object(ctl,"_state",return_value=self.state),\
+             patch.object(ctl,"_settings",return_value=(self.config,self.key)),\
+             patch.object(ctl,"_save",lambda state:None),\
+             patch.object(ctl,"check_channel",side_effect=DistributionNotFound(
+                 "No published channel")):
+            result=ctl.check()
+            self.assertEqual(result["reason_code"],"channel_not_published")
+            self.assertEqual(result["status"],"waiting")
+            self.assertFalse(result["installable"])
+            self.assertTrue(result["configured"])
+            self.assertIn("Aucune release signée",result["last_result"])
+
     def test_invalid_signed_index_is_safely_reported(self):
         with patch.object(ctl,"_state",return_value=self.state),\
              patch.object(ctl,"_settings",return_value=(self.config,self.key)),\

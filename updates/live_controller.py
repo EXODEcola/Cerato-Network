@@ -28,7 +28,7 @@ ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT/"tools"))
 sys.path.insert(0,str(ROOT/"updates"))
 from build_release import verify, PackageError
-from remote import check_channel, download_channel, DistributionError, _parse_version
+from remote import check_channel, download_channel, DistributionError, DistributionNotFound, _parse_version
 
 SERVICE="cerato-network-web.service"
 BASE=Path("/opt/cerato-network")
@@ -273,8 +273,18 @@ def check():
         return status()
     try:
         # A signed channel can legitimately announce the same version as installed.
-        latest=check_channel(config["base_url"],config["channel"],key,
-                             installed_version=state["installed_version"])
+        try:
+            latest=check_channel(config["base_url"],config["channel"],key,
+                                 installed_version=state["installed_version"])
+        except DistributionNotFound:
+            # During the initial setup, no signed channel exists yet. A
+            # missing channel is not evidence of a failed certificate/key.
+            state["available_version"]=None
+            state["state"]="waiting"
+            state["reason_code"]="channel_not_published"
+            state["last_result"]="Aucune release signée publiée sur ce canal pour le moment."
+            _save(state)
+            return status()
         if not latest["update_available"]:
             state["available_version"]=None
             state["state"]="current"
