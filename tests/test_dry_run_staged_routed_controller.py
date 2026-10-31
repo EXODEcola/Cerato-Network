@@ -35,7 +35,7 @@ def render_nft(data):
                     'type filter hook input priority -30; policy accept;'])
     if data['pool']:
         csv=', '.join(sorted(data['pool'], key=lambda x:ipaddress.ip_address(x)))
-        entries.append(f'iifname "{wan}" ip daddr {csv} drop')
+        entries.append(f'iifname "{wan}" ip daddr {{ {csv} }} drop')
     entries.append(' }')
     entries.append('}')
     return '\\n'.join(entries)+'\\n'
