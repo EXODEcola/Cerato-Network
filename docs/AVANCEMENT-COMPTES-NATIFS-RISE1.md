@@ -64,3 +64,27 @@ ce lot.
 
 La vérification automatique du dépôt exécute toutes les suites sur GitHub
 Actions. Elle ne remplace pas le test du basculement réel sur RISE-1.
+
+## Préparation de l’interface de connexion native
+
+`web/live-auth-overlay.js` et `web/live-auth-overlay.css` présentent, avec
+la palette graphite Cerato, les écrans de connexion par e-mail, l'enrôlement
+TOTP, les codes de récupération à usage unique, la gestion des comptes et le
+bouton Déconnexion. Le navigateur n'enregistre pas la session en localStorage
+et utilise le cookie HttpOnly renvoyé par le serveur.
+
+`integrations/stage_live_auth_frontend.py` peut préparer, **sur une copie
+privée**, les fichiers `web/app.js` et `web/style.css` de la console
+historique avec cette interface additionnelle. L'outil vérifie d'abord
+l'empreinte du backend RISE-1, la présence des pages principales et le thème
+graphite. Il compile la syntaxe JavaScript avec Node avant de créer les copies
+privées. Il ne modifie ni le site OVH, ni Nginx, ni les comptes existants.
+
+**Attention : une connexion dans l'overlay ne prouve pas que l'ancien
+frontend rétablit toutes les pages réseau.** Le test navigateur et la validation
+de l'interaction des anciennes fonctions `req()`, `refresh()` et
+`render()` sont encore requis. Le comportement d'initialisation après
+rechargement doit notamment être vérifié sur une copie de l'interface réelle.
+
+Le canal HTTPS de releases et la signature Ed25519 restent également à
+provisionner, avant toute mise à jour installable depuis le navigateur.
