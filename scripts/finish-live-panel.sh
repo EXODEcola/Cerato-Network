@@ -44,6 +44,7 @@ done
 for rel in integrations/prepare_live_visual_refresh.py \
            integrations/patch_live_update_center.py \
            integrations/check_live_auth_cutover.py \
+           integrations/inspect_live_login_layers.py \
            integrations/rise1_2026-10-30_baseline.json \
            themes/cerato-graphite.css \
            updates/live_controller.py updates/remote.py tools/build_release.py; do
@@ -96,6 +97,8 @@ NETWORK_BEFORE="$(config_hashes)"
 echo "Contrôle de compatibilité : OK."
 echo "Fichiers prévus : web/app.js, web/style.css, moteur de mises à jour (3 fichiers)."
 echo "Configuration réseau avant : $NETWORK_BEFORE"
+echo "Inventaire non sensible des protections de connexion (aucune désactivation) :"
+python3 "$REPO/integrations/inspect_live_login_layers.py"
 if [[ "$MODE" == "--check" ]]; then
   echo "Aucun fichier de production modifié. Pour appliquer : --install"
   exit 0
