@@ -165,6 +165,25 @@ de diagnostic courte. Stopper avec Ctrl+C.
 de basculement distant et son rollback feront l'objet d'un développement
 distinct, après revue de l'état réel des deux machines.
 
+## Contrat de réservation IPv4 routée — modèle sans effets de bord
+
+Le planificateur `network/plan.py` peut désormais **déclarer** une IPv4
+supplémentaire comme attribuée à un pair WireGuard, à l'exclusion des
+publications NAT par port sur cette même IP.
+
+- `route_public_ip(ip, peer)` refuse les IPv4 non présentes dans le pool,
+  les pairs inconnus, les allocations en double et les conflits NAT.
+- `routed_preview()` fournit l'IP /32, le pair cible, les besoins
+  `AllowedIPs`, le routage par source et les prérequis de sécurité.
+- Le champ `applicable=false` est **volontaire**. Un assistant Web ne doit
+  jamais présenter ce modèle comme une opération réseau déjà appliquée.
+
+Pour rendre cette fonction opérationnelle, il reste à développer l'agent
+Ubuntu, l'orchestrateur root contrôlé, le plan de retour arrière temporisé,
+le mécanisme d'activation persistante et des tests réels de bout en bout.
+La publication d'une simple release Web ou le résultat d'un ping WireGuard
+ne doivent pas débloquer le bouton d'attribution.
+
 ## 5. Releases Cerato Network
 
 La release `v0.1.0-beta.1` publiée sur GitHub contient un overlay CSS ;
