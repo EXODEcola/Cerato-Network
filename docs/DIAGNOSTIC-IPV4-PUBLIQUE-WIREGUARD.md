@@ -108,6 +108,42 @@ L'échec HTTP **n'implique pas** l'échec du TCP : comparer les captures.
 
 Ne pas présenter `wg show` (handshake) comme une preuve de routage public.
 
+## Cas fréquent : DNAT valide mais route retour asymétrique
+
+Si le Dell utilise sa box locale comme route par défaut et que la
+passerelle effectue uniquement le DNAT (sans SNAT), les paquets entrants
+peuvent parvenir au service mais les réponses dirigées vers le client
+Internet repartent par le réseau local au lieu de WireGuard.
+Le diagnostic `--role peer --mode local-nat` signale ce cas en lisant
+la route du noyau pour une connexion de test à source VPN.
+**Ce signal ne prouve pas à lui seul une panne** : la passerelle
+pourrait aussi effectuer une translation SNAT, à confirmer.
+
+Vérifier dans l'ordre, sans modifier le réseau :
+
+1. Démarrer temporairement sur le pair un service de test TCP limité
+   à son IP VPN (dans un répertoire vide) et vérifier qu'il écoute.
+2. Tester depuis la passerelle directement l'adresse VPN du pair.
+   Ce test contourne l'IP publique et le DNAT.
+3. Tester le port publié depuis une connexion externe indépendante.
+4. En cas d'échec, inspecter les compteurs nftables et faire une capture
+   ciblée sur WAN, interface WireGuard de la passerelle et du pair.
+5. Contrôler la route retour du pair et les éventuelles règles SNAT.
+   Ne jamais remplacer sa route par défaut ni ouvrir SSH à Internet
+   pour corriger un test HTTP.
+
+Exemple de service temporaire, sur le pair, avec un répertoire vide
+(suppression et arrêt après vérification) :
+
+```bash
+mkdir -p /tmp/cerato-test-empty
+python3 -m http.server 8080 --bind IP_VPN_DELL --directory /tmp/cerato-test-empty
+```
+
+**Important :** le serveur HTTP de test est accessible via le port
+publié pendant son fonctionnement. Il doit rester limité à une fenêtre
+de diagnostic courte. Stopper avec Ctrl+C.
+
 ## 4. Critères avant d'activer réellement le mode routed-wg
 
 1. L'Additional IPv4 est confirmée par OVH comme routée au serveur passerelle.
