@@ -29,6 +29,7 @@ ASSETS=("manifest.json","manifest.sig","cerato-network-release.zip")
 MAX={"manifest.json":32768,"manifest.sig":256,
      "cerato-network-release.zip":32_000_000,
      "beta.json":4096,"beta.sig":256,"stable.json":4096,"stable.sig":256,
+     "dev.json":4096,"dev.sig":256,
      "release-verification.pub":4096}
 HOSTS={"api.github.com","github.com","release-assets.githubusercontent.com",
        "objects.githubusercontent.com"}
@@ -72,7 +73,7 @@ def discover(channel,*,get=_get):
     names=set(ASSETS)|{channel+".json",channel+".sig","release-verification.pub"}
     for release in listing:
         if (not isinstance(release,dict) or release.get("draft") or
-                release.get("prerelease")!=(channel=="beta")):
+                release.get("prerelease")!=(channel in ("beta","dev"))):
             continue
         version=release.get("tag_name")
         try:
@@ -80,6 +81,8 @@ def discover(channel,*,get=_get):
         except (ValueError,TypeError):
             continue
         if channel=="beta" and "-beta." not in version:
+            continue
+        if channel=="dev" and "-dev." not in version:
             continue
         if channel=="stable" and "-" in version:
             continue
