@@ -183,3 +183,29 @@ fonctionnement de la publication NAT.
 Le passage en mode routé doit mettre à jour l'état persistant OVH et Dell
 **de manière coordonnée** ; ne pas se contenter d'opérations `ip`
 éphémères. En attendant, conserver la règle NAT et le tunnel.
+
+## Audit des dépendances de basculement (à lancer sur RISE-1)
+
+Ce contrôle est complémentaire au préflight IP déjà effectué. Il détecte
+les dépendances **persistantes** qui risquent de réinstaller l'ancienne
+adresse publique sur la WAN, ou de remplacer les règles nftables.
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show origin/feature/public-ip-path-preflight:scripts/audit_routed_cutover_dependencies.py \
+  > /tmp/cerato-cutover-audit.py
+
+sudo python3 /tmp/cerato-cutover-audit.py \
+  --public-ip 54.37.165.151 \
+  --peer-ip 10.77.0.2 \
+  --wan enp1s0f0 --wg wg-cerato
+```
+
+Ce script lit les paramètres réseau Cerato et les résume en booléens
+et nombres, sans publier les clés, les configurations brutes ou les
+identifiants. Le champ `can_activate` reste volontairement
+`false` : les prérequis SSH et de rollback hors bande doivent
+être validés indépendamment. **Ne pas désactiver les services
+`cerato-network-additional-ip` ou `cerato-network-rules` avant
+la migration coordonnée**.
