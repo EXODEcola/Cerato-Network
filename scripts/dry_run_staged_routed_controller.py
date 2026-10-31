@@ -77,12 +77,12 @@ def _render_function(raw,*,modified=False):
         raise SimulationError("Fonction render_nft inattendue")
     node=found[0]
     blocked=(ast.Import,ast.ImportFrom,ast.With,ast.AsyncWith,ast.Global,
-             ast.Nonlocal,ast.Lambda,ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef,
+             ast.Nonlocal,ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef,
              ast.While,ast.Await,ast.Yield,ast.YieldFrom,ast.Try)
     allowed_calls={
         "re.fullmatch","ipaddress.ip_address","sorted",
         "str","len","ValueError","entries.append","entries.extend",
-        "m.get","routed_render_nft",
+        "m.get","literal.join","routed_render_nft",
     }
     for child in ast.walk(node):
         if child is node:
@@ -94,6 +94,10 @@ def _render_function(raw,*,modified=False):
                 name=child.func.id
             elif isinstance(child.func,ast.Attribute) and isinstance(child.func.value,ast.Name):
                 name=child.func.value.id+"."+child.func.attr
+            elif (isinstance(child.func,ast.Attribute) and child.func.attr=="join"
+                  and isinstance(child.func.value,ast.Constant)
+                  and isinstance(child.func.value.value,str)):
+                name="literal.join"
             else:
                 raise SimulationError("Appel non approuvé")
             if name not in allowed_calls:
@@ -118,12 +122,16 @@ def _pure_adapter(stage):
         content=_read_exact(stage/filename,digest)
         node=ast.parse(content.decode("utf-8"))
         for item in ast.walk(node):
-            if isinstance(item,(ast.Import,ast.ImportFrom)):
-                for name in item.names:
-                    module=name.name.split(".",1)[0]
-                    if module not in ("__future__","ipaddress","re",
-                                      "routed_nft_inject","routed_firewall"):
-                        raise SimulationError("Import externe interdit dans un helper")
+            if isinstance(item,ast.Import):
+                imported=[part.name.split(".",1)[0] for part in item.names]
+            elif isinstance(item,ast.ImportFrom):
+                imported=[(item.module or "").split(".",1)[0]]
+            else:
+                continue
+            if any(name not in ("__future__","ipaddress","re",
+                                "routed_nft_inject","routed_firewall")
+                   for name in imported):
+                raise SimulationError("Import externe interdit dans un helper")
     import types
     names=("routed_firewall","routed_nft_inject","cerato_routed_support")
     before={key:sys.modules.get(key) for key in names}
