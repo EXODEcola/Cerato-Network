@@ -74,7 +74,12 @@ def handler_type(store):
                 store.actions.append("nat-add")
                 return self._json(200,{"ok":True})
             return self._json(404,{"error":"not-found"})
-    return wrap_legacy_handler(Legacy,store,allowed_origin=ORIGIN)
+    return wrap_legacy_handler(Legacy,store,allowed_origin=ORIGIN,
+        viewer_status_provider=lambda: {
+            "dashboard_mode":"real","tunnel_active":True,
+            "peers":{"dell":{"last_handshake":0,"ip":"10.77.0.2"}},
+            "gateway_private_key":"must-never-leak"
+        })
 
 class EndToEndLocalHTTPBridgeTests(unittest.TestCase):
     @classmethod
