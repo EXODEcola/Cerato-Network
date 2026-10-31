@@ -167,7 +167,7 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             existing=target.read_bytes()
             if len(existing)+len(patch)>2_000_000 or CSS_PATCH_MARKER in existing:
                 raise UpdateError("Correctif CSS déjà présent ou trop volumineux")
-            return {"web/style.css":existing.rstrip(b"\\r\\n")+b"\\n"+patch+b"\\n"}
+            return {"web/style.css":existing.rstrip(b"\r\n")+b"\n"+patch+b"\n"}
         if verify_only:
             return None
         return {name:z.read(OVERLAY+name) for name in sorted(required)}

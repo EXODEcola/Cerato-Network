@@ -42,6 +42,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SIGNING_PRIVATE_PEM: ${{ secrets.CERATO_ED25519_PRIVATE_PEM }}
       TRUSTED_PUBLIC_SHA256: ${{ vars.CERATO_SIGNING_PUBLIC_SHA256 }}
+      REQUEST_VERSION: ${{ inputs.version }}
+      REQUEST_CHANNEL: ${{ inputs.channel }}
+      REQUEST_FROM_VERSION: ${{ inputs.from_version }}
     steps:
       - name: Checkout du commit main approuve
         uses: actions/checkout@v4
@@ -60,8 +63,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            [[ "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
-            [[ "${{ inputs.from_version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
+            [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
+            [[ "$REQUEST_FROM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
           fi
       - name: Tests complets AVANT signature
         shell: bash
@@ -103,9 +106,9 @@ jobs:
               --pattern 'manifest.json' --pattern 'manifest.sig' --pattern 'cerato-network-release.zip'
             python3 tools/release_pipeline.py verify --output "$OUT/release" --public-key "$PUB"
           else
-            VERSION="${{ inputs.version }}"
-            CHANNEL="${{ inputs.channel }}"
-            FROM="${{ inputs.from_version }}"
+            VERSION="$REQUEST_VERSION"
+            CHANNEL="$REQUEST_CHANNEL"
+            FROM="$REQUEST_FROM_VERSION"
             if gh release view "$VERSION" >/dev/null 2>&1; then
               echo "La release immutable existe deja: $VERSION" >&2
               exit 1
@@ -147,6 +150,7 @@ jobs:
               "$RUNNER_TEMP/cerato-trust/release-verification.pub" \
               --target "$GITHUB_SHA" --title "Cerato Network $VERSION" \
               --notes "Release Graphite CSS signee Ed25519. Aucun backend ni JavaScript remplace." \
-              --prerelease --latest=false
+              --latest=false \
+              $( [[ "$CHANNEL" == "beta" ]] && printf '%s' '--prerelease' )
           fi
           echo "Release GitHub publiee, OVH non modifie."
