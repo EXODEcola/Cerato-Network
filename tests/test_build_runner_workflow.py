@@ -14,11 +14,11 @@ class CeratoBuildRunnerContractTests(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, Linux, X64, cerato-build]",workflow)
         self.assertIn("prepare-approved-tag.sh",workflow)
         self.assertIn("persist-credentials: false",workflow)
-        self.assertIn("test ! -e \\"$OUT/manifest.sig\\"",workflow)
+        self.assertIn('test ! -e "$OUT/manifest.sig"',workflow)
         for forbidden in ("--signing-key","ssh ","scp ","systemctl restart",
                           "cerato-updatectl install","release-source.json"):
             self.assertNotIn(forbidden,workflow)
-        self.assertIn("installable\\":false",workflow)
+        self.assertIn('"installable":false',workflow)
 
     def test_tag_build_script_accepts_only_external_venv(self):
         script=(ROOT/"scripts/prepare-approved-tag.sh").read_text()
