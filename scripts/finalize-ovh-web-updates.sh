@@ -20,6 +20,23 @@ if (( ${#ARGS[@]} > 0 )); then
     echo "Clé et empreinte à fournir ensemble et dans cet ordre." >&2; exit 2;
   }
 fi
+# Public signed-release mirror dependencies only, no Build or credentials.
+MIRROR_FILES=(
+  tools/stage_signed_static_release.py
+  tools/publish_signed_release.py
+  tools/sync_github_signed_release.py
+)
+for rel in "${MIRROR_FILES[@]}"; do
+  [[ -f "$ROOT/$rel" && ! -L "$ROOT/$rel" ]] || {
+    echo "Moteur de publication signé manquant : $rel" >&2; exit 2;
+  }
+  if [[ -e "$ENGINE/$rel" ]]; then
+    [[ -f "$ENGINE/$rel" && ! -L "$ENGINE/$rel" && "$(stat -c %u "$ENGINE/$rel")" == 0 ]] || {
+      echo "Ancien fichier de miroir non fiable : $rel" >&2; exit 2;
+    }
+  fi
+done
+
 for rel in updates/live_controller.py updates/remote.py tools/build_release.py; do
   [[ -f "$ROOT/$rel" && ! -L "$ROOT/$rel" && -f "$ENGINE/$rel" && ! -L "$ENGINE/$rel" ]] || {
     echo "Moteur source ou installé absent : $rel" >&2; exit 2;
@@ -83,6 +100,16 @@ for rel in updates/live_controller.py updates/remote.py tools/build_release.py; 
   mkdir -p "$BACKUP/$(dirname "$rel")"
   cp -p "$ENGINE/$rel" "$BACKUP/$rel"
 done
+# A rollback must restore every existing component AND remove new ones.
+NEW_MIRROR_FILES=()
+for rel in "${MIRROR_FILES[@]}"; do
+  if [[ -f "$ENGINE/$rel" ]]; then
+    mkdir -p "$BACKUP/$(dirname "$rel")"
+    cp -p "$ENGINE/$rel" "$BACKUP/$rel"
+  else
+    NEW_MIRROR_FILES+=("$rel")
+  fi
+done
 CHANGED=0
 rollback(){
   local rc=$?
@@ -91,6 +118,13 @@ rollback(){
     echo "Échec : restauration du précédent moteur d'updates." >&2
     for rel in updates/live_controller.py updates/remote.py tools/build_release.py; do
       cp -p "$BACKUP/$rel" "$ENGINE/$rel" || true
+    done
+    for rel in "${MIRROR_FILES[@]}"; do
+      if [[ -f "$BACKUP/$rel" ]]; then
+        cp -p "$BACKUP/$rel" "$ENGINE/$rel" || true
+      else
+        rm -f -- "$ENGINE/$rel"
+      fi
     done
   fi
   exit "$rc"
@@ -103,6 +137,12 @@ install -o root -g root -m 0644 "$ROOT/updates/remote.py" \
   "$ENGINE/updates/remote.py"
 install -o root -g root -m 0644 "$ROOT/tools/build_release.py" \
   "$ENGINE/tools/build_release.py"
+for rel in "${MIRROR_FILES[@]}"; do
+  install -o root -g root -m 0644 "$ROOT/$rel" "$ENGINE/$rel"
+done
+python3 -m py_compile "$ENGINE/tools/sync_github_signed_release.py" \
+  "$ENGINE/tools/publish_signed_release.py" \
+  "$ENGINE/tools/stage_signed_static_release.py"
 "$CTL" status | python3 -c 'import json,sys; s=json.load(sys.stdin);assert "installed_version" in s'
 python3 "$ROOT/integrations/activate_live_updates.py" --install "${ARGS[@]}"
 AFTER="$(net_hash)" || false
