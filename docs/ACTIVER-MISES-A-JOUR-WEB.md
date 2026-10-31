@@ -1,102 +1,92 @@
-# Mise en service de la distribution signée Cerato Network
+# Cerato Network — procédure d'exploitation des mises à jour Web
 
-**État confirmé :** Nginx du RISE-1 sert maintenant le préfixe
-`https://51.210.223.57/cerato-releases/`, avec certificat valide pour l'IP.
-Les répertoires publics sont créés. Aucune release officielle ni clé de
-vérification épinglée n'a encore été publiée/configurée ; il est donc normal
-que le panneau indique **« Distribution à configurer »**.
+## Règles de maintenance (31 octobre 2026)
 
-## Travail logiciel terminé dans le dépôt
+- **CERATO-BUILD-01 est hors périmètre.** Ne demander ni SSH,
+  ni création manuelle de clé sur Build, ni réinstallation du runner.
+  La chaîne de compilation Cerato existante reste indépendante.
+- **OVH RISE-1 (51.210.223.57)** est le seul hôte où une
+  dernière activation SSH du centre de mises à jour est autorisée.
+- Les versions suivantes doivent être recherchées et installées dans
+  l'onglet **Mises à jour**, avec signature, compatibilité, sauvegarde
+  et restauration automatiques. Un SSH OVH ponctuel reste admis pour
+  le développement technique, pas pour chaque installation courante.
 
-- `scripts/init-release-signer.sh` prépare **une seule fois** une identité
-  de signature Ed25519 dans l'espace privé d'un **compte non-root sur un hôte
-  distinct du routeur OVH**. Il refuse les clés déjà présentes et ne place
-  jamais le secret dans GitHub ou dans le serveur de distribution. Il affiche
-  la clé **publique** et son empreinte SHA-256 DER.
-- `tools/stage_signed_static_release.py` contrôle l'index de canal,
-  le manifeste, les signatures, la période de validité et le contenu exact
-  d'une release graphique RISE-1 **avant toute publication**.
-- `tools/publish_signed_release.py` vérifie la source et la clé publique
-  **déjà épinglées** sur OVH ; précontrôle par défaut, installation uniquement
-  avec `--install`. Il publie l'archive immuable avant de basculer
-  atomiquement le canal vers un répertoire de signatures cohérent. Une
-  version inférieure ou déjà publiée avec d'autres octets est refusée.
-- La console et son contrôleur acceptent seulement les releases compatibles
-  et signées ; l'IP publique, WireGuard, NAT et le backend historique ne
-  sont pas modifiés par le mécanisme de publication.
+## Ce qui a été prouvé sur RISE-1
 
-## Deux frontières de confiance
+- Web historique Graphite sur port interne 8787, service actif.
+- Contrôleur `cerato-updatectl` et page « Mises à jour » installés.
+- Nginx sur la même IP HTTPS distribue le répertoire prévu
+  `https://51.210.223.57/cerato-releases/`.
+- Certificat TLS valide **pour l'IP** lors du dernier contrôle Nginx.
+- Sauvegarde Nginx :
+  `/var/backups/cerato-network-inplace/nginx-releases/20261031T110532Z`.
 
-**Hôte de signature distinct (exemple : CERATO-BUILD-01, sous un compte
-non-root de signature dédié, pas le compte de CI)** :
+Ce qui **n'a pas été prouvé** : existence d'une clé publique Ed25519
+indépendamment approuvée et épinglée, présence de l'index de canal signé,
+publication d'une première release visuelle compatible et réussite d'une
+installation de bout en bout via le navigateur.
+
+## Commande unique OVH
+
+Le script `integrations/activate_live_updates.py` est le seul
+point d'entrée recommandé pour l'activation finale, sans toucher
+à Build, au réseau, au serveur Web ou à Nginx.
+
+Si la source officielle **est déjà épinglée** :
 
 ```bash
-cd ~/Cerato-Network
-git pull --ff-only origin feature/secure-accounts
-bash scripts/init-release-signer.sh --init
+cd ~/Cerato-Network && git pull --ff-only origin feature/secure-accounts && sudo python3 integrations/activate_live_updates.py --install
 ```
 
-La commande affiche le chemin de la clé publique et l'empreinte DER. **Ne
-jamais mettre la clé privée sur RISE-1, dans GitHub ou dans les fichiers Web.**
-Conserver une sauvegarde hors ligne chiffrée et sécurisée de cette clé. La
-confirmation indépendante de l'empreinte est une opération humaine de
-confiance, non automatisable par le serveur auquel on cherche à faire confiance.
+Si la source n'est pas encore épinglée, l'activation nécessite une
+**clé publique officiellement approuvée et son empreinte SHA-256 DER
+vérifiée indépendamment**. Elles ne sont pas actuellement disponibles
+dans ce dépôt ou dans les résultats d'exploitation fournis.
+Une fois la clé publique copiée et approuvée sur OVH, utiliser **une
+seule commande** avec les deux paramètres `--public-key` et
+`--fingerprint`, comme décrit dans
+`docs/OBJECTIF-MAJ-WEB-RISE1.md`.
+Ne jamais inventer une empreinte ou copier une clé privée sur OVH.
 
-**Avant l'activation sur RISE-1 :**
+La commande **sans `--install`** donne l'état actuel, sans modifier
+le serveur :
 
-1. Préparer une copie **explicitement approuvée** de l'interface Web actuelle
-   `web/app.js` et `web/style.css`, sans exporter le `server.py`.
-   Un numéro supérieur à l'état de départ `v0.0.0` est requis.
-2. Préparer l'overlay compatible :
-   ```bash
-   python3 tools/compose_live_overlay.py \
-     --source /DOSSIER-PRIVE-DES-FICHIERS-WEB-APPROUVES \
-     --destination /SOURCE-RELEASE/live-overlay \
-     --from-version v0.0.0 --visual-only
-   ```
-   La source de release doit aussi contenir `LICENSE` et `README.md`.
-3. Construire le paquet avec `tools/release_pipeline.py prepare`.
-   Copier l'archive et le manifeste approuvés dans le répertoire privé du
-   compte de signature, puis signer via `tools/release_pipeline.py sign`.
-   Produire un index de canal `beta` avec `tools/channel_index.py`.
-4. Vérifier avec `tools/stage_signed_static_release.py` et copier **uniquement**
-   les cinq fichiers publics validés, ainsi que la clé **publique**, sur OVH.
-5. Installer la clé publique sur OVH dans un fichier appartenant à root, puis
-   provisionner la source avec la véritable empreinte DER approuvée :
-   ```bash
-   sudo python3 tools/configure_live_release_source.py \
-     --url https://51.210.223.57/cerato-releases \
-     --public-key /CHEMIN/CLE-PUBLIQUE-APPROUVEE.pub \
-     --fingerprint EMPREINTE-SHA256-DER-APPROUVEE \
-     --channel beta
-   ```
-6. Sur OVH, après transfert dans des répertoires **privés et contrôlés** :
-   ```bash
-   sudo python3 tools/publish_signed_release.py \
-     --release /CHEMIN/RELEASE-SIGNEE/v0.1.0-beta.1 \
-     --channels /CHEMIN/INDEX-CANAL-SIGNE \
-     --install
-   ```
-   Puis `sudo /usr/local/sbin/cerato-updatectl check` et vérification
-   des permissions et de l'affichage dans l'onglet Mises à jour.
+```bash
+cd ~/Cerato-Network && git pull --ff-only origin feature/secure-accounts && sudo python3 integrations/activate_live_updates.py
+```
 
-**Les chemins /CHEMIN et empreintes ci-dessus sont des marqueurs, pas des
-valeurs réelles. Ne pas lancer ces commandes avant la création et la
-vérification des fichiers indiqués.**
+Les résultats doivent être lus précisément :
 
-## Limitations à ne pas masquer
+| Statut | Signification |
+| --- | --- |
+| `source_missing` | Source signée non épinglée ; configuration impossible sans clé publique approuvée |
+| `waiting_for_signed_release` | Source raccordée, mais canal public absent |
+| `published_not_verified` | Canal accessible HTTPS, signature encore non vérifiée |
+| `verification_failed` | Canal présent mais validation de signature/compatibilité en échec |
+| `incompatible_release` | Archive authentifiée mais incompatible avec ce panneau |
+| `ready` | Contrôle de signature terminé ; le navigateur peut utiliser les releases compatibles |
 
-- La signature initiale et la première release réelles ne peuvent pas être
-  fabriquées par GitHub seul. Il faut un compte de signature distinct et
-  l'approbation de la clé publique.
-- Le déploiement du **nouveau système Owner/Admin/User + 2FA** est un autre
-  basculement sécurisé, toujours en préparation : le front actuel conserve
-  volontairement ses deux protections.
-- Un `git pull` seul sur RISE-1 ne remplace pas les étapes d'approbation
-  cryptographique et de publication.
-- Les index signés expirent et doivent être renouvelés sur le signataire
-  même lorsqu'aucune mise à jour du code n'est publiée.
+**Un statut `ready` ne signifie pas nécessairement qu'une mise à jour
+est disponible**. Le champ `installable` décide si le bouton
+« Installer » peut être activé.
 
-Quand le dispositif est initialisé, le navigateur peut télécharger et
-installer les releases **compatibles** sans répéter ces étapes SSH à chaque
-version.
+## Circuit des prochaines versions
+
+Développement → tests GitHub (une exécution par push) → compilation
+par la chaîne Cerato Build **déjà existante** → approbation/signature
+par l'autorité prévue → distribution HTTPS publique sur OVH →
+vérification et installation depuis l'interface Cerato Network.
+
+La distribution **ne signera jamais automatiquement un ZIP à partir
+du dépôt seul** ; un pipeline qui fournit une release non signée ne
+suffit pas. Les fichiers `manifest.sig`, `channels/beta.sig` et la
+clé publique de l'autorité réelle sont indispensables.
+
+Les changements Owner/Admin/User + 2FA restent un basculement
+indépendant et ne doivent pas désactiver HTTP Basic ni l'ancienne
+connexion avant tests HTTP de bout en bout et rollback validé.
+
+Le Dell R530 (`10.77.0.2`), l'Additional IPv4
+`54.37.165.151`, WireGuard, NAT, règles de pare-feu et
+configurations d'accès réseau sont hors du périmètre de l'activation.
