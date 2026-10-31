@@ -105,3 +105,36 @@ TLS soient validés. La clé privée ne doit jamais être copiée sur OVH.
   installé via ces seuls répertoires.
 - Le tunnel Dell `10.77.0.2`, l'Additional IP `54.37.165.151`,
   le NAT, le pare-feu et le backend actuel ne sont pas modifiés.
+
+## Installation Nginx avec retour arrière — disponible sur la branche
+
+Le script `integrations/install_same_host_releases.py` permet une installation
+contrôlée du **seul emplacement public de distribution**, sur le serveur Web
+déjà en place. Il ne touche pas au backend, à la connexion admin, à WireGuard,
+au NAT ou aux IP.
+
+Pour le premier déploiement, la séquence est :
+
+```bash
+cd ~/Cerato-Network && git pull --ff-only origin feature/secure-accounts && \
+sudo python3 integrations/install_same_host_releases.py && \
+sudo python3 integrations/install_same_host_releases.py --install
+```
+
+Un unique bloc Nginx `listen 443` explicitement associé à
+`server_name 51.210.223.57` doit être trouvé. L'outil refuse de modifier
+un site par défaut ambigu, une configuration déjà modifiée ou un certificat
+non valide pour **l'adresse IP elle-même**. Il crée une sauvegarde root,
+valide `nginx -t`, recharge uniquement Nginx, puis vérifie encore le
+certificat. En cas d'échec, il restaure le bloc précédent. Si l'inventaire
+ne reconnaît pas le bloc réel, il faut faire une revue ciblée : ne jamais
+forcer l'insertion dans un autre vhost.
+
+L'absence des fichiers de release signifie qu'après activation l'URL du canal
+retournera normalement **404**, jusqu'à publication. C'est une configuration
+du serveur statique, **pas encore** l'activation du bouton Installer.
+
+**Prérequis indispensables au fonctionnement complet** : signataire Ed25519
+indépendant, clé publique contrôlée, index beta signé renouvelé régulièrement
+et release compatible et approuvée. Aucun de ces éléments n'est fabriqué
+automatiquement à partir de l'IP du panneau.
