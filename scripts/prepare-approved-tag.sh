@@ -54,8 +54,16 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
-  echo "Environnement .venv absent : lancer scripts/bootstrap-dev.sh sur le VPS de build." >&2
+# The existing VPS can keep its .venv; an Actions runner must use an isolated
+# venv OUTSIDE the checkout, since actions/checkout may clean untracked files.
+BUILD_PYTHON="${CERATO_BUILD_PYTHON:-$ROOT/.venv/bin/python}"
+if [[ ! -x "$BUILD_PYTHON" ]]; then
+  echo "Python de build isolé manquant ; utiliser CERATO_BUILD_PYTHON vers un venv approuvé." >&2
+  exit 1
+fi
+BUILD_PYTHON="$(realpath "$BUILD_PYTHON")"
+if [[ "$BUILD_PYTHON" == "$ROOT/"* ]] && [[ "${CERATO_BUILD_PYTHON:-}" != "" ]]; then
+  echo "Le Python explicite d'un runner doit résider hors du checkout." >&2
   exit 1
 fi
 
@@ -69,11 +77,11 @@ echo "Extraction isolée du tag signé $VERSION..."
 git archive --format=tar "$VERSION" | tar -xf - -C "$WORKTREE"
 
 echo "Tests complets sur les fichiers exacts du tag approuvé..."
-source "$ROOT/.venv/bin/activate"
+export PATH="$(dirname "$BUILD_PYTHON"):$PATH"
 bash "$WORKTREE/scripts/test-on-vps.sh"
 
 # The approved snapshot, not the git working directory, becomes the ZIP.
-python "$WORKTREE/tools/release_pipeline.py" prepare \
+"$BUILD_PYTHON" "$WORKTREE/tools/release_pipeline.py" prepare \
   --source "$WORKTREE" --output "$OUTPUT" --version "$VERSION"
 
 echo "Archive sans signature préparée dans $OUTPUT."

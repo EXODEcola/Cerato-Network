@@ -22,7 +22,7 @@ Distribution des releases       (hébergement à configurer)
 RISE-1 / Cerato Network         (service de production)
 ```
 
-**Les compilations et compressions n'utilisent pas GitHub Actions.** L'ensemble des builds et des archives est réalisé sur le VPS de build existant. GitHub reste l'hébergement des sources et de l'historique.
+**La CI GitHub vérifie les PR et prépare uniquement des archives de sources non signées.** Un workflow facultatif, réservé aux tags GPG approuvés, peut lancer automatiquement la compilation sur un runner isolé `cerato-build` lorsqu'il a réellement été enregistré et activé. Aucune clé privée Ed25519 ni release de production n'est hébergée ou signée par la CI.
 
 ## Composants prévus
 

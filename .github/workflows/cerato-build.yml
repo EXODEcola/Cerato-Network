@@ -1,0 +1,63 @@
+name: Cerato Network - Build sur tag approuve
+
+# Opt-in only: do not queue work on a non-existent build runner.
+# A signed and trusted Git tag is required by prepare-approved-tag.sh.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cerato-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  approved-unsigned-build:
+    name: Compiler sur Cerato Build (non signe)
+    if: ${{ vars.CERATO_NETWORK_BUILD_ENABLED == 'true' && vars.CERATO_TRUSTED_TAG_FINGERPRINT != '' }}
+    runs-on: [self-hosted, Linux, X64, cerato-build]
+    timeout-minutes: 20
+    env:
+      CERATO_TRUSTED_TAG_FINGERPRINT: ${{ vars.CERATO_TRUSTED_TAG_FINGERPRINT }}
+    steps:
+      - name: Recuperer exactement le tag signe
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Exiger un tag annote signe de confiance
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
+          [[ "$CERATO_TRUSTED_TAG_FINGERPRINT" =~ ^[A-Fa-f0-9]{40}([A-Fa-f0-9]{24})?$ ]]
+          git verify-tag --raw "$GITHUB_REF_NAME" >/dev/null 2>&1
+      - name: Environnement Python hors checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(id -u)" -ne 0 ]]
+          python3 -m venv "$RUNNER_TEMP/cerato-net-venv-$GITHUB_RUN_ID"
+          "$RUNNER_TEMP/cerato-net-venv-$GITHUB_RUN_ID/bin/python" -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Test du tag et archive non signee sur Cerato Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/cerato-net-candidate-$GITHUB_RUN_ID"
+          export CERATO_BUILD_PYTHON="$RUNNER_TEMP/cerato-net-venv-$GITHUB_RUN_ID/bin/python"
+          bash scripts/prepare-approved-tag.sh "$GITHUB_REF_NAME" "$OUT"
+          test -f "$OUT/manifest.json"
+          test -f "$OUT/cerato-network-release.zip"
+          test ! -e "$OUT/manifest.sig"
+          printf '{"tag":"%s","commit":"%s","signed":false,"installable":false}\n' "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" > "$OUT/build-provenance.json"
+          echo "CERATO_BUILD_CANDIDATE=$OUT" >> "$GITHUB_ENV"
+      - name: Archiver le candidat, pas une release installee
+        uses: actions/upload-artifact@v4
+        with:
+          name: cerato-network-candidate-${{ github.ref_name }}
+          path: ${{ env.CERATO_BUILD_CANDIDATE }}/
+          if-no-files-found: error
+          retention-days: 14
