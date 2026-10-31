@@ -394,3 +394,51 @@ non depuis une entrée utilisateur.
 Cela reste un contrat de validation sans lecture/écriture système.
 Une future transaction privilégiée devra synchroniser les deux
 sources de vérité et vérifier le rollback avant toute publication.
+
+## Essai à blanc du moteur nft avec les données réelles du RISE-1 (lecture seule)
+
+Une fois que le staging `Gwi10hKO` a passé la vérification
+`status=review-only-verified`, le script ci-dessous vérifie le
+**rendu** du contrôleur historique contre celui de la copie, puis
+construit une simulation d'état futur à partir de **copies en mémoire**.
+Il retire virtuellement le NAT TCP 8080 et prépare virtuellement une
+route `54.37.165.151/32` vers le pair `10.77.0.2`. Il ne sauvegarde
+aucun fichier et n'exécute ni le contrôleur complet, ni `nft`,
+ni `wg`, ni `ip` ni `systemctl`.
+
+Le script ne traite que la fonction AST `render_nft(data)` vérifiée
+par SHA avec un espace d'exécution limité aux fonctions de rendu
+nécessaires. Les trois modules de compatibilité sont également
+vérifiés sur leurs empreintes avant chargement.
+**Les données de configuration et le rendu nft ne sont jamais
+imprimés**. Une différence de forme de règles provoque un refus,
+plutôt qu'une correction automatique.
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+
+git show origin/feature/public-ip-path-preflight:scripts/dry_run_staged_routed_controller.py \
+  > /tmp/cerato-routed-dry-run.py
+
+python3 -m py_compile /tmp/cerato-routed-dry-run.py
+
+sudo python3 /tmp/cerato-routed-dry-run.py \
+  --stage /tmp/cerato-routed-stage.Gwi10hKO/patched \
+  --public-ip 54.37.165.151 \
+  --vpn-ip 10.77.0.2 \
+  --management-ip 51.210.223.57
+```
+
+Résultat attendu : `status=validated-in-memory`,
+`current_legacy_render_unchanged=true`, les trois contrôles
+`virtual_forward_inbound`, `virtual_forward_outbound` et
+`virtual_gateway_input_drop_preserved` à `true`,
+`network_modified=false`, `ready_to_install=false`.
+Ce résultat est une preuve de **compatibilité de génération de
+règles seulement**, et non une preuve de bon routage ni un feu vert
+pour retirer l'alias WAN actuel.
+
+Le basculement réel nécessite encore les vérifications OVHcloud,
+l'agent Dell, la politique du firewall du Dell et le rollback
+à expiration indépendant sur les deux hôtes.
