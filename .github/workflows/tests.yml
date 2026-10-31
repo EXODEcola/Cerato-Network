@@ -5,7 +5,7 @@ name: Cerato Network - Tests de developpement
 # restent visibles sur la pull request.
 on:
   push:
-    branches: [feature/secure-accounts, main]
+    branches: [feature/secure-accounts, feature/secure-accounts-ui, main]
   workflow_dispatch:
 
 permissions:
