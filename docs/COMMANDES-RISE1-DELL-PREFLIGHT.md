@@ -541,3 +541,42 @@ service actuellement publié doit rester accessible).
 Ne **pas** appliquer ces règles depuis SSH, ni attribuer la /32
 directement, tant que la transaction et le rollback indépendants
 Dell/RISE-1 ne sont pas implémentés et validés.
+
+## Dell — audit d'exposition et routage cryptokey WireGuard (lecture seule)
+
+Résultat du premier audit fourni par le Dell R530 (31 octobre) :
+11 vérifications sur 11 conformes, `sshd` par clé seule,
+`wg-cerato=10.77.0.2`, source VPN routée par table `51820`,
+priorité `1101` disponible, `rp_filter` non strict et Tailscale
+présent. TCP écoute sur les ports 22, 53, 40295, 60784 ;
+`ufw_state=inactive`. Ce ne sont pas des preuves d'exposition
+publique de ces ports.
+
+Sur le **Dell**, pas sur RISE-1, lancer le complément :
+
+```bash
+cd ~/Cerato-Network-preflight
+git fetch origin feature/public-ip-path-preflight
+
+git show FETCH_HEAD:scripts/preflight_dell_exposure_cryptokey.py \
+  > /tmp/cerato-dell-exposure.py
+
+python3 -m py_compile /tmp/cerato-dell-exposure.py
+
+sudo python3 /tmp/cerato-dell-exposure.py \
+  --public-ip 54.37.165.151 \
+  --gateway-vpn-ip 10.77.0.1 \
+  --tunnel wg-cerato
+```
+
+Le script ne montre ni clés WireGuard, ni adresses locales réelles,
+ni règles nft en clair, ni processus. Il classe les adresses liées
+aux ports TCP/UDP et mesure si le pair cryptokey associé à
+`10.77.0.1` dispose bien de `0.0.0.0/0`, requis pour acheminer
+l'ensemble des destinations Internet via cette route source.
+Il relève aussi l'existence de chaînes INPUT nftables et d'une IPv6
+globale ; ces comptages ne certifient aucune politique de filtrage.
+
+`ready_to_activate=false` reste volontaire, même si tous les
+contrôles techniques passent. Les pare-feu, watchdogs et agents
+d'activation restent à développer et tester en conditions réelles.
