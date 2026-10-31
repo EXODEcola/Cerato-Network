@@ -1,48 +1,51 @@
-# Cerato Network : liaison de build sans SSH par mise à jour
+# Cerato Network — automatisation de développement et mise à jour OVH
 
-## Ce qui fonctionne déjà
-La pull request vers `main` est testée par GitHub Actions. Une archive
-**de sources non signées** n'est produite qu'après validation des tests.
-Deux exécutions identiques pour un même push/PR ont été supprimées.
+## CERATO-BUILD-01 reste indépendant
 
-## Automatisation du Build (mise en veille par défaut)
-`.github/workflows/cerato-build.yml` se déclenche lors de la publication d'un
-**tag annoté GPG** `vX.Y.Z` ou `vX.Y.Z-beta.N`.
-Il n'utilise `CERATO-BUILD-01` que si :
-- un runner GitHub Actions **self-hosted, Linux, X64, cerato-build** y est réellement enregistré ;
-- la variable GitHub Actions `CERATO_NETWORK_BUILD_ENABLED` vaut `true` ;
-- `CERATO_TRUSTED_TAG_FINGERPRINT` contient une empreinte GPG déjà
-  approuvée et importée dans la trousse de confiance du compte runner.
+**Aucune commande ni nouveau runner GitHub Actions ne doit être déployé sur
+CERATO-BUILD-01.** Le workflow de build sur un runner `self-hosted` proposé
+auparavant a été retiré du dépôt. L'automatisation Cerato Build existante
+reste inchangée et ne peut pas être attestée à partir du seul dépôt GitHub.
 
-**Aucune de ces trois conditions n'est prouvée par la configuration actuelle**
-du dépôt. Nous n'avons pas configuré à distance ta VM ni changé son agent.
-Sans ces prérequis, le job est volontairement **ignoré**, pas laissé en
-file d'attente infinie et sans message trompeur « release publiée ».
+Le workflow `.github/workflows/tests.yml` vérifie les commits et crée
+uniquement un artefact de sources **non signé et non installable**, après
+réussite des tests. Un échec de CI interdit cet artefact.
 
-Quand l'intégration existante est établie et activée, chaque nouveau tag
-**approuvé** entraîne automatiquement le test et le paquetage sur
-Cerato Build, sans demande de commande SSH à chaque mise à jour.
-Le runner construit une **archive non signée**, à partir des octets du
-tag ; aucune clé Ed25519 ne lui est transmise.
+## Installation et mises à jour : RISE-1 uniquement
 
-## Publication finale (reste distincte)
-Une vraie release installable exige ensuite :
-1. une **validation humaine** du paquet et de sa compatibilité RISE-1 ;
-2. une signature Ed25519 sur une identité de signature indépendante ;
-3. la publication de `manifest.json`, `manifest.sig`, archive et
-   index de canal signé sur le HTTPS OVH ;
-4. la clé publique épinglée sur RISE-1 et une vérification
-   `cerato-updatectl check`.
+Le panneau historique OVH expose déjà `/cerato-releases/` via un HTTPS
+valide. Un script de finalisation est publié :
+`scripts/finalize-ovh-web-updates.sh`.
 
-Ce n'est qu'après ces étapes que le panneau
-**Mises à jour → Rechercher → Installer** peut fonctionner. 
-Le tag de source ne doit **jamais** être automatiquement interprété comme une
-version de l'overlay 8787 actuel : le dépôt `web/` est différent de
-l'interface Graphite déjà installée sur RISE-1. L'installer sans une
-adaptation contrôlée pourrait casser l'interface.
+Il peut mettre à niveau les trois fichiers du moteur existant avec
+sauvegarde et rollback, puis activer la source de confiance et un contrôle
+périodique toutes les 6 heures. Le script refuse de modifier le serveur
+quand une clé publique Ed25519 officielle n'a pas été approuvée.
 
-**Politique** : aucune écriture WireGuard, NAT, firewall, IP,
-backend historique, Nginx ou création de clé privée n'est réalisée par
-les workflows de build. On ne fusionne pas une branche d'authentification
-dont le cutover Owner/Admin/User + TOTP reste inachevé simplement
-pour « avoir une nouvelle version ».
+### Précontrôle sans modification
+
+```bash
+cd ~/Cerato-Network && git pull --ff-only origin feature/secure-accounts && sudo bash scripts/finalize-ovh-web-updates.sh --check
+```
+
+Si une source est déjà approuvée et enregistrée, l'installation sur OVH
+peut alors être déclenchée via une commande unique `--install`. Sinon,
+fournir explicitement `--public-key` et `--fingerprint`, correspondant
+à une clé publique officiellement approuvée (la **clé privée n'est jamais
+installée sur OVH**). Un HTTP 200 ou un `git pull` ne constitue pas une
+signature, et la clé ne peut pas être inventée pour débloquer l'interface.
+
+Les releases visuelles **signées et compatibles** s'installent ensuite
+depuis le panneau. Les contrôles périodiques sont en lecture seule et
+n'installent jamais sans validation de l'administrateur.
+
+Cette configuration ne modifie pas WireGuard, le Dell, les Additional IPv4,
+NAT, le pare-feu, Nginx ou la double authentification historique.
+
+## État de validation
+
+Les scripts de contrôle, de vérification Ed25519 et de restauration sont
+testés sur GitHub. Aucun déploiement signé de bout en bout n'est prouvé
+sur RISE-1 tant que la véritable clé publique approuvée et la première
+release signée ne sont pas disponibles. Les tests CI n'attestent pas
+l'exécution sur un OVH ou sur une VM Cerato Build.
