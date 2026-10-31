@@ -44,3 +44,4 @@ jobs:
           bash -n scripts/upgrade-live-update-engine.sh
           bash -n scripts/enable-live-updates.sh
           bash -n scripts/prepare-same-host-releases.sh
+          bash -n scripts/init-release-signer.sh
