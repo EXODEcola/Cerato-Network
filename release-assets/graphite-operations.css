@@ -1,0 +1,18 @@
+/* CERATO-NETWORK-SIGNED-CSS-V1 */
+/* Conservative Graphite refinements; no network page, API or JS changes. */
+.cerato-updates .cerato-update-state,
+.cerato-updates .cerato-update-summary {
+  border-radius: 7px;
+  transition: border-color .12s ease;
+}
+.cerato-updates :focus-visible,
+.sidebar :focus-visible,
+.topbar :focus-visible {
+  outline: 2px solid #8bb9a6;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cerato-updates *,
+  .sidebar *,
+  .topbar * { transition: none !important; }
+}
