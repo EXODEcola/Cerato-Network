@@ -32,7 +32,7 @@ concurrency:
 jobs:
   signed-release:
     name: Signer une release approuvee et publier sur GitHub
-    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'EXODEcola/Cerato-Network' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'EXODEcola/Cerato-Network' && vars.CERATO_SIGNING_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     environment: cerato-network-signing
     timeout-minutes: 18
