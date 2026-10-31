@@ -1,12 +1,11 @@
 name: Cerato Network - Tests de developpement
 
-# Un seul contrôle par PR et des validations finales après fusion.
-# Les pushes de développement ne doivent pas créer une seconde exécution.
+# Une seule validation par push sur la branche de travail et sur main.
+# Pas de déclenchement pull_request en double ; les checks de commit
+# restent visibles sur la pull request.
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches: [feature/secure-accounts, main]
   workflow_dispatch:
 
 permissions:
