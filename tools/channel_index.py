@@ -40,6 +40,8 @@ def create_channel(release_dir: Path, channel: str, output: Path,
         raise PackageError("Impossible de publier une prerelease sur stable")
     if channel=="dev" and "-dev." not in version:
         raise PackageError("Le canal dev exige une version -dev.N")
+    if channel=="beta" and "-beta." not in version:
+        raise PackageError("Le canal beta exige une version -beta.N")
     source=(release_dir/"manifest.json").read_bytes()
     now=int(time.time()) if issued_at is None else int(issued_at)
     if now<0:
