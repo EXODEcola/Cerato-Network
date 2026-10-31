@@ -36,3 +36,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Syntaxe JavaScript
         run: node --check web/app.js
+      - name: Preflight shell des installeurs
+        run: |
+          bash -n scripts/finish-live-panel.sh
+          bash -n scripts/upgrade-live-update-engine.sh
+          bash -n scripts/enable-live-updates.sh
