@@ -47,6 +47,9 @@ OVERLAY="cerato-network/live-overlay/"
 SCHEMA="cerato-network-legacy-web-overlay-v1"
 VISUAL_SCHEMA="cerato-network-legacy-web-visual-v1"
 VISUAL_FILES={"web/app.js","web/style.css"}
+CSS_PATCH_SCHEMA="cerato-network-legacy-web-css-v1"
+CSS_PATCH_FILES={"web/style.append.css"}
+CSS_PATCH_MARKER=b"/* CERATO-NETWORK-SIGNED-CSS-V1 */"
 
 
 class UpdateError(RuntimeError):
@@ -134,12 +137,13 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             raise UpdateError("Release non compatible avec le panneau RISE-1 actuel")
         spec=json.loads(z.read(marker))
         if (not isinstance(spec,dict) or
-            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA) or
+            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA,CSS_PATCH_SCHEMA) or
             spec.get("target")!="cerato-network-web-8787" or
             not isinstance(spec.get("from_versions"),list) or
             installed_version not in spec["from_versions"]):
             raise UpdateError("Migration de cette version non autorisée")
-        required=set(ALLOWED) if spec["schema"]==SCHEMA else VISUAL_FILES
+        required=(set(ALLOWED) if spec["schema"]==SCHEMA else
+                  CSS_PATCH_FILES if spec["schema"]==CSS_PATCH_SCHEMA else VISUAL_FILES)
         # The only allowed update payloads are the known full legacy overlay or
         # a style+JS update. A visual refresh never redistributes server.py.
         found={name.removeprefix(OVERLAY) for name in z.namelist()
@@ -150,6 +154,20 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             info=z.getinfo(OVERLAY+name)
             if info.file_size<=0 or info.file_size>2_000_000:
                 raise UpdateError("Fichier de mise à jour hors limites")
+        if spec["schema"]==CSS_PATCH_SCHEMA:
+            patch=z.read(OVERLAY+"web/style.append.css")
+            if (not patch.startswith(CSS_PATCH_MARKER) or
+                    b"@import" in patch.lower() or b"url(" in patch.lower()):
+                raise UpdateError("Correctif CSS signé non conforme")
+            if verify_only:
+                return None
+            target=ALLOWED["web/style.css"]
+            if target.is_symlink() or not target.is_file():
+                raise UpdateError("CSS existant inconnu")
+            existing=target.read_bytes()
+            if len(existing)+len(patch)>2_000_000 or CSS_PATCH_MARKER in existing:
+                raise UpdateError("Correctif CSS déjà présent ou trop volumineux")
+            return {"web/style.css":existing.rstrip(b"\\r\\n")+b"\\n"+patch+b"\\n"}
         if verify_only:
             return None
         return {name:z.read(OVERLAY+name) for name in sorted(required)}
@@ -170,7 +188,7 @@ def _snapshot():
 
 
 def _replace(files):
-    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES):
+    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES,{"web/style.css"}):
         raise UpdateError("Liste de fichiers Web non autorisée")
     for rel in sorted(files):
         source=ALLOWED[rel]

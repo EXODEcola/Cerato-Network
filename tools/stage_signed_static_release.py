@@ -27,6 +27,8 @@ from remote import _parse_version, CHANNELS
 
 BUNDLE="cerato-network-release.zip"
 EXPECTED_OVERLAY="cerato-network/live-overlay/"
+CSS_SCHEMA="cerato-network-legacy-web-css-v1"
+CSS_FILES={EXPECTED_OVERLAY+"compat.json",EXPECTED_OVERLAY+"web/style.append.css"}
 EXPECTED_FILES={
     EXPECTED_OVERLAY+"compat.json",
     EXPECTED_OVERLAY+"web/app.js",
@@ -88,16 +90,29 @@ def validate(release_dir:Path,channel_dir:Path,public_key:Path,channel:str,
         permitted=EXPECTED_FILES|{
             "cerato-network/LICENSE","cerato-network/README.md",
         }
-        if found!=permitted or len(archive.infolist())!=len(permitted):
+        css_only=found==CSS_FILES|{
+            "cerato-network/LICENSE","cerato-network/README.md",
+        }
+        if (not css_only and found!=permitted) or len(archive.infolist())!=len(found):
+            raise StagePublicationError("Seul un overlay graphique RISE-1 est publiable")
             raise StagePublicationError("Seul un overlay graphique RISE-1 est publiable")
         spec=json.loads(archive.read(EXPECTED_OVERLAY+"compat.json"))
         if (not isinstance(spec,dict) or
-                spec.get("schema")!="cerato-network-legacy-web-visual-v1" or
+                spec.get("schema") not in ("cerato-network-legacy-web-visual-v1",CSS_SCHEMA) or
                 spec.get("target")!="cerato-network-web-8787" or
                 not isinstance(spec.get("from_versions"),list) or
                 not spec["from_versions"] or
                 any(not isinstance(v,str) for v in spec["from_versions"])):
             raise StagePublicationError("Compatibilité RISE-1 non approuvée")
+        if css_only:
+            if spec["schema"]!=CSS_SCHEMA:
+                raise StagePublicationError("Schéma du correctif CSS invalide")
+            css=archive.read(EXPECTED_OVERLAY+"web/style.append.css")
+            if (not css.startswith(b"/* CERATO-NETWORK-SIGNED-CSS-V1 */") or
+                len(css)>200_000 or b"@import" in css.lower() or b"url(" in css.lower()):
+                raise StagePublicationError("Correctif CSS non approuvé")
+        elif spec["schema"]!="cerato-network-legacy-web-visual-v1":
+            raise StagePublicationError("Schéma visuel complet invalide")
         for source in spec["from_versions"]:
             _parse_version(source)
             if _parse_version(source)>=_parse_version(version):
