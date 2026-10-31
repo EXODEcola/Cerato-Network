@@ -97,6 +97,25 @@ def rp_filter_mode(read, tunnel):
     return {"all": all_mode, "tunnel": tunnel_mode, "effective": max(all_mode, tunnel_mode)}
 
 
+def ssh_default_posture(read):
+    """Évalue les paramètres SSH par défaut, jamais les Match par client."""
+    options = {}
+    for line in read(["/usr/sbin/sshd", "-T"]).splitlines():
+        name, _, value = line.partition(" ")
+        if name in ("passwordauthentication", "kbdinteractiveauthentication",
+                    "pubkeyauthentication", "permitrootlogin"):
+            options[name] = value.strip().lower()
+    needed = ("passwordauthentication", "kbdinteractiveauthentication",
+              "pubkeyauthentication", "permitrootlogin")
+    if not all(key in options for key in needed):
+        raise ValueError("Incomplete sshd options")
+    approved = (options["passwordauthentication"] == "no" and
+                options["kbdinteractiveauthentication"] == "no" and
+                options["pubkeyauthentication"] == "yes" and
+                options["permitrootlogin"] == "no")
+    return approved
+
+
 def wg_peer_state(read, tunnel, peer_ip):
     """Ne renvoie jamais les clés publiques des pairs."""
     wanted = ipaddress.ip_address(peer_ip)
@@ -248,13 +267,28 @@ def check(read, role, public_ip, tunnel, peer_ip, wan, mode, port):
                                          "ok" if present else "attention",
                                          "IPv4 publique /32 présente sur WireGuard" if present
                                          else "IPv4 publique non attribuée au Dell"))
-            probe("source_route",
-                  lambda: route_device(read, "1.1.1.1", public_ip),
-                  lambda dev: report("source_route",
-                                     "ok" if dev == tunnel else "attention",
-                                     "Retour depuis l'IPv4 publique via WireGuard" if
-                                     dev == tunnel else
-                                     "La route retour depuis l'IPv4 publique évite WireGuard"))
+            if any(item["code"] == "public_on_peer" and
+                   item["status"] == "attention" for item in findings):
+                report("source_route", "attention",
+                       "IPv4 publique absente : vérifier le retour après attribution /32")
+            else:
+                probe("source_route",
+                      lambda: route_device(read, "1.1.1.1", public_ip),
+                      lambda dev: report("source_route",
+                                         "ok" if dev == tunnel else "attention",
+                                         "Retour depuis l'IPv4 publique via WireGuard" if
+                                         dev == tunnel else
+                                         "La route retour depuis l'IPv4 publique évite WireGuard"))
+        if port == 22:
+            probe("ssh_default_posture", lambda: ssh_default_posture(read),
+                  lambda secure: report(
+                      "ssh_default_posture",
+                      "ok" if secure else "attention",
+                      "Paramètres SSH globaux restrictifs (vérifier aussi les Match)"
+                      if secure else
+                      "SSH global autorise une méthode non recommandée ; "
+                      "ne pas exposer le port 22 avant durcissement "
+                      "et validation d'un accès par clé"))
         probe("listener", lambda: read(["ss", "-H", "-ltn", "sport", "=",
                                         ":" + str(port)]),
               lambda output: report(
