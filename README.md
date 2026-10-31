@@ -22,7 +22,7 @@ Distribution des releases       (hébergement à configurer)
 RISE-1 / Cerato Network         (service de production)
 ```
 
-**La CI GitHub vérifie les PR et prépare uniquement des archives de sources non signées.** Un workflow facultatif, réservé aux tags GPG approuvés, peut lancer automatiquement la compilation sur un runner isolé `cerato-build` lorsqu'il a réellement été enregistré et activé. Aucune clé privée Ed25519 ni release de production n'est hébergée ou signée par la CI.
+**La CI GitHub exécute les tests et prépare une archive de sources non signée après réussite.** Aucun job du dépôt ne modifie la VM Cerato Build. Son automatisation existante reste indépendante. Aucune signature ni release de production n'est générée par GitHub Actions.
 
 ## Composants prévus
 
