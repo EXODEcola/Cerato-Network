@@ -48,6 +48,8 @@ class FakeRead:
             return '[{"dev":"wg-cerato"}]'
         if argv == ["ip", "-j", "-4", "route", "get", PUB]:
             return '[{"dev":"wg-cerato"}]' if self.routed else '[{"dev":"lo"}]'
+        if argv == ["ip", "-j", "-4", "route", "get", "1.1.1.1", "from", PEER]:
+            return '[{"dev":"wg-cerato"}]' if self.routed else '[{"dev":"eno1"}]'
         if argv == ["ip", "-j", "-4", "route", "get", "1.1.1.1", "from", PUB]:
             return '[{"dev":"wg-cerato"}]' if self.routed else '[{"dev":"ens3"}]'
         if argv == ["wg", "show", WG, "allowed-ips"]:
@@ -84,6 +86,16 @@ class PreflightTests(unittest.TestCase):
         findings = self.by_code(result)
         self.assertEqual(findings["wan_address"]["status"], "attention")
         self.assertEqual(findings["public_route"]["status"], "attention")
+
+    def test_local_nat_peer_flags_asymmetric_reply_without_assuming_snat(self):
+        fake = FakeRead(routed=False)
+        result = check(fake, "peer", PUB, WG, PEER, None, "local-nat", 8080)
+        findings = self.by_code(result)
+        self.assertEqual(findings["nat_return_route"]["status"], "attention")
+        self.assertIn("sans SNAT", findings["nat_return_route"]["message"])
+        fake = FakeRead(routed=True)
+        result = check(fake, "peer", PUB, WG, PEER, None, "local-nat", 8080)
+        self.assertEqual(self.by_code(result)["nat_return_route"]["status"], "ok")
 
     def test_peer_requires_public_alias_and_return_route(self):
         fake = FakeRead(routed=False, public_on_peer=False)
