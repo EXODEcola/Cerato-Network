@@ -20,9 +20,11 @@ class Handler:
     def do_POST(self): return None
 """
 APP=b"""let live={};
+async function req(path){return fetch(path,{method:'GET',credentials:'same-origin'});}
+function overview(){return req('/api/status');}
 function updates(){return 'Release update';}
 function bind(){return true;}
-function overview(){return 'Dashboard';}
+function dashboard(){return 'Dashboard';}
 function ips(){return 'IPv4';}
 function machines(){return 'Dell';}
 function nat(){return 'NAT';}
@@ -66,6 +68,8 @@ class StageNativeLoginTests(unittest.TestCase):
             self.assertIn(MARKER,js)
             self.assertIn("function overview(){",js)
             self.assertIn("function nat(){",js)
+            self.assertIn("window.fetch=legacyFetch;",js)
+            self.assertIn("headers.set('X-Cerato-CSRF',state.csrf)",js)
             self.assertIn("endpoint+'mfa/verify'",js)
             self.assertIn("cerato-auth-dialog",css)
             self.assertEqual(output.stat().st_mode & 0o777,0o700)
@@ -96,6 +100,19 @@ class StageNativeLoginTests(unittest.TestCase):
             (source/"web/app.js").write_bytes(APP+MARKER.encode())
             with self.assertRaises(NativeAuthUIStageError):
                 stage(source,Path(root)/"result",baseline=baseline)
+
+    def test_unverified_legacy_api_transport_is_denied(self):
+        with tempfile.TemporaryDirectory() as root:
+            source,baseline=self.fixture(root)
+            old=(source/"web/app.js").read_bytes()
+            modified=old.replace(b"fetch(path",b"fetch2(path")
+            (source/"web/app.js").write_bytes(modified)
+            import hashlib,json
+            base=json.loads(baseline.read_text())
+            base["frontend_sha256"]=hashlib.sha256(modified).hexdigest()
+            baseline.write_text(json.dumps(base))
+            with self.assertRaisesRegex(NativeAuthUIStageError,"Transport API"):
+                stage(source,Path(root)/"output",baseline=baseline)
 
     def test_native_login_does_not_store_sessions_in_local_storage(self):
         source=(ROOT/"web/live-auth-overlay.js").read_text(encoding="utf8")
