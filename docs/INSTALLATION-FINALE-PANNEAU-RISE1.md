@@ -67,3 +67,22 @@ Les évolutions suivantes **ne nécessitent pas de connexion SSH**, tant que le 
 Si le navigateur affiche encore l'ancien rendu, effectuer un rechargement complet (Ctrl+F5). Si le script échoue, ne pas relancer plusieurs installateurs ; conserver la sortie du message d'erreur. Le chemin de sauvegarde est affiché après l'installation et reste sous `/var/backups/cerato-network-inplace/graphite-bootstrap/`.
 
 Le test CI sur GitHub ne remplace pas la vérification de l'installation et de la distribution signée dans l'environnement réseau réel.
+
+## Correctif du redémarrage et ancienne double connexion — 31 octobre 2026
+
+Sur le premier essai, l'appel HTTP de validation sur `127.0.0.1:8787` a reçu `Connection refused` immédiatement après `systemctl restart`. Le script a donc déclenché son rollback ; **ce message seul ne prouve pas une panne persistante du backend**.
+
+Le script attend maintenant que le service soit réellement prêt, en effectuant au maximum 30 vérifications locales, et attend aussi la reprise du service après une restauration. En cas d'échec persistant, il affiche les champs systemd d'état sans journal ni secret. Le contrôleur ne modifie pas WireGuard, NAT ou les IP.
+
+Une seule commande enchaînée (les étapes suivantes ne se lancent que si la précédente a réussi) :
+
+```bash
+cd ~/Cerato-Network && \
+git pull --ff-only origin feature/secure-accounts && \
+sudo bash scripts/finish-live-panel.sh --check && \
+sudo bash scripts/finish-live-panel.sh --install
+```
+
+Le nouveau précontrôle décrit uniquement la présence structurelle des anciennes protections (HTTP Basic côté reverse proxy, connexion historique dans le panneau, routes d'authentification modernes) **sans exporter d’identifiants ni de configuration Nginx**.
+
+**Attention :** cette installation corrige le thème et le moteur de mise à jour ; **elle ne remplace pas encore** la double authentification historique. Le système Owner/Admin/User et 2FA n'est pas encore activé sur `server.py` du RISE-1. Ne pas supprimer `auth_basic` ou les anciennes routes tant que toutes les API réseau ne sont pas protégées par les nouvelles sessions, les permissions et le CSRF, et que la migration des comptes n'a pas passé les tests de bout en bout.
