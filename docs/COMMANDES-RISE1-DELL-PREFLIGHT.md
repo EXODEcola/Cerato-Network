@@ -446,20 +446,20 @@ l'agent Dell, la politique du firewall du Dell et le rollback
 ## Correction dry-run INPUT pool-set (31 octobre 2026)
 
 L'essai à blanc sur le RISE-1 a renvoyé
-\`INPUT drop historique absent ou dupliqué\`. L'ancien validateur
-attendait un DROP sur une IPv4 seule, mais \`render_nft\` peut émettre
-l'ensemble \`ip daddr { 54.37.165.151, ... } drop\` depuis le pool
+`INPUT drop historique absent ou dupliqué`. L'ancien validateur
+attendait un DROP sur une IPv4 seule, mais `render_nft` peut émettre
+l'ensemble `ip daddr { 54.37.165.151, ... } drop` depuis le pool
 historique. Le correctif parse **l'ensemble littéral exact de la
 chaîne INPUT** et refuse le cas où la /32 n'est pas membre, si une
 entrée est invalide/dupliquée, ou si la protection a changé.
 
 **Attention :** la copie
-\`/tmp/cerato-routed-stage.Gwi10hKO/patched\` contient l'ancien
-\`routed_nft_inject.py\` ; elle ne doit pas être utilisée pour ce
+`/tmp/cerato-routed-stage.Gwi10hKO/patched` contient l'ancien
+`routed_nft_inject.py` ; elle ne doit pas être utilisée pour ce
 nouveau test. Préparer une **nouvelle** copie privée avec le module
 corrigé, sans installer quoi que ce soit sur le réseau.
 
-\`\`\`bash
+```bash
 set -euo pipefail
 cd ~/Cerato-Network
 git fetch origin feature/public-ip-path-preflight
@@ -488,11 +488,11 @@ sudo python3 /tmp/cerato-routed-dry-run-fix.py \
   --public-ip 54.37.165.151 \
   --vpn-ip 10.77.0.2 \
   --management-ip 51.210.223.57
-\`\`\`
+```
 
-La révision \`08db1e75...\` est précisément celle dont les tests
+La révision `08db1e75...` est précisément celle dont les tests
 CI sont réussis. Le script exige toujours le SHA-256 de
-\`ceratoctl\` original et de sa copie, ainsi que les empreintes
-des trois modules. Aucun \`nft\`, \`wg\`, \`ip\`, ni accès SSH
+`ceratoctl` original et de sa copie, ainsi que les empreintes
+des trois modules. Aucun `nft`, `wg`, `ip`, ni accès SSH
 n'est exécuté. La configuration reste inchangée ; ce test
 n'autorise ni installation ni basculement de l'Additional IPv4.
