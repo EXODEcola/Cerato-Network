@@ -70,11 +70,17 @@ def inject_routed_forward(legacy_nft, *, wan, wg, management_ip,
     incoming=_exact_drop(legacy_nft,wan,wg)
     outgoing=_exact_drop(legacy_nft,wg,wan)
     fwd_match=re.search(r'(?m)^[ \t]*chain forward[ \t]*\{',legacy_nft)
-    next_match=re.search(r'(?m)^[ \t]*chain (?:input|postrouting|output|prerouting)[ \t]*\{',
+    next_match=re.search(r'(?m)^[ \t]*chain input[ \t]*\{',
                           legacy_nft[fwd_match.end():])
     if next_match is None:
         raise LegacyFirewallError("Fin de chaîne FORWARD non vérifiable")
     boundary=fwd_match.end()+next_match.start()
+    if re.search(r'(?m)^[ \t]*chain [a-z]+[ \t]*\{',
+                 legacy_nft[fwd_match.end():boundary]):
+        raise LegacyFirewallError("Chaîne intermédiaire FORWARD inattendue")
+    if any(line in legacy_nft for line in
+           rules["forward_before_wan_drop"] + rules["forward_before_wg_drop"]):
+        raise LegacyFirewallError("Règle routée déjà insérée")
     if incoming.start()<fwd_match.end() or outgoing.start()<fwd_match.end() or (
             incoming.start()>=boundary or outgoing.start()>=boundary):
         raise LegacyFirewallError("DROP en dehors de FORWARD")
