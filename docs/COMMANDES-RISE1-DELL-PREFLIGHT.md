@@ -237,3 +237,30 @@ identifier la vraie implémentation avant toute migration.
 **Ne jamais partager** le contenu intégral de
 `/etc/cerato-network/config.json`, `/etc/wireguard/wg-cerato.conf`
 ou un dump avec clés privées.
+
+## Introspection des fonctions de régénération (RISE-1)
+
+Le premier inventaire a confirmé sur RISE-1 :
+- `ceratoctl` Python SHA-256 `41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6`,
+  avec fonctions `render_nft`, `rewrite_wg_peers`, `apply`, `save`.
+- `server.py` SHA-256 `9c7087a1eeca7e3c8a4462c2cd8e6659e4d692409771117c575cd00b46b30360`.
+
+L'inventaire ci-dessous est **strictement en lecture seule**,
+bloque les empreintes différentes, n'imprime ni source ni valeurs de
+configuration et résume uniquement les appels, paramètres et clés connues
+de l'AST. Il sert à adapter le patch du contrôleur existant :
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show origin/feature/public-ip-path-preflight:scripts/inspect_live_controller_semantics.py \
+  > /tmp/cerato-live-controller-semantics.py
+python3 -m py_compile /tmp/cerato-live-controller-semantics.py
+sudo python3 /tmp/cerato-live-controller-semantics.py \
+  --controller-sha 41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6 \
+  --backend-sha 9c7087a1eeca7e3c8a4462c2cd8e6659e4d692409771117c575cd00b46b30360
+```
+
+Une empreinte différente signifie que le fichier de production a changé.
+Ne pas contourner la comparaison pour forcer un patch. Les scripts
+d'inventaire restent distincts des opérations d'installation.
