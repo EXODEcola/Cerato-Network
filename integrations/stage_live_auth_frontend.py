@@ -50,6 +50,10 @@ def stage(source_root:Path,destination:Path, *, baseline:Path=BASELINE)->dict:
     css=_source(src/"web/style.css").decode("utf8")
     if any(app.count(anchor)!=1 for anchor in REQUIRED_JS):
         raise NativeAuthUIStageError("Interfaces historiques inconnues : aucun patch")
+    # The native auth layer rewrites browser fetch() requests. A legacy build
+    # using XMLHttpRequest or unknown transports MUST NOT bypass this adapter.
+    if "fetch(" not in app or not any(p in app for p in ("'/api/", '"/api/')):
+        raise NativeAuthUIStageError("Transport API historique non reconnu : migration refusée")
     if STYLE_MARKER not in css or MARKER in app:
         raise NativeAuthUIStageError("Thème manquant ou migration déjà présente")
     script=_source(ROOT/"web/live-auth-overlay.js").decode("utf8")
@@ -60,6 +64,12 @@ def stage(source_root:Path,destination:Path, *, baseline:Path=BASELINE)->dict:
     new_css=css.rstrip()+"\n\n"+styles+"\n"
     if len(new_js.encode())>MAX_BYTES or len(new_css.encode())>MAX_BYTES:
         raise NativeAuthUIStageError("Patch UI trop volumineux")
+    # Ensure the staged layer really includes the modern CSRF adapter.
+    # Hiding controls in JavaScript is never used as an authorization check.
+    if ("window.fetch=legacyFetch;" not in script or
+            "headers.set('X-Cerato-CSRF',state.csrf)" not in script or
+            "nativeFetch(path" not in script):
+        raise NativeAuthUIStageError("Adaptateur CSRF natif incomplet")
     # Validate syntax before writing any copy.
     result=subprocess.run(["node","--check","-"],input=new_js,
                           text=True,capture_output=True,timeout=10,check=False)
