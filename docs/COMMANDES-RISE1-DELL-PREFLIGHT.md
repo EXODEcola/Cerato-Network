@@ -108,3 +108,78 @@ Ne jamais exécuter les commandes suivantes dans le but de tester :
 de `54.37.165.151/32` sur WAN, suppression de la clé du pair WireGuard,
 ou désactivation de Tailscale. L'activation exige encore deux watchdogs
 indépendants et un rollback physique validé.
+
+
+## Résultats réels du 31 octobre 2026
+
+Contrôles exécutés sur RISE-1 :
+
+- `wg-cerato` présent, handshake récent, `ip_forward=1`.
+- `enp1s0f0` conserve `54.37.165.151/32` ; aucune route publique
+  /32 vers WireGuard n'est active.
+- `wg show wg-cerato allowed-ips` ne contient que
+  `10.77.0.2/32` pour le Dell (ne jamais remplacer cette valeur sans
+  une sauvegarde complète des autres pairs).
+- nftables DNAT TCP 8080 présent, aucun SNAT visible dans la chaîne
+  `postrouting`, chaîne FORWARD filtrante avec règle `drop` générale
+  sur l'arrivée WAN / sortie WireGuard hors connexion DNAT.
+- Mise à jour du panneau `v0.1.0-beta.1`, canal `beta`,
+  `already_current` : aucun correctif réseau n'a été installé.
+
+Contrôles exécutés sur le Dell :
+
+- Règle `from 10.77.0.2 lookup 51820` et table 51820 avec
+  `default dev wg-cerato` ; `rp_filter=2`.
+- Aucun alias `54.37.165.151/32`, aucune règle de routage source
+  pour cette IPv4. La commande `ip route get 1.1.1.1 from 54.37.165.151`
+  est susceptible d'échouer tant que l'adresse n'existe pas : ce n'est
+  pas en soi un dysfonctionnement du tunnel.
+- SSH en écoute sur le port 22 mais configuration par défaut :
+  `PasswordAuthentication yes`, `PermitRootLogin without-password`,
+  `PubkeyAuthentication yes`. UFW inactif. **SSH non prêt à être
+  exposé sur l'IPv4 supplémentaire sans durcissement**.
+
+### Prochaine étape : vérifier l'accès SSH exclusivement par clé
+
+Depuis une machine administratrice déjà autorisée, dans une
+**deuxième session**, après récupération de l'IP Tailscale du Dell :
+
+```bash
+ssh -o PreferredAuthentications=publickey \
+  -o PasswordAuthentication=no \
+  -o KbdInteractiveAuthentication=no \
+  ceratoadmin@IP_TAILSCALE_DELL
+```
+
+Ce test est à exécuter depuis **le PC administrateur**, pas depuis le
+Dell. Il échouera si aucune clé SSH publique de l'administrateur n'a
+été enregistrée dans le compte `ceratoadmin` : il faut alors
+configurer la clé, pas désactiver prématurément les mots de passe.
+Ne pas déconnecter la session SSH actuelle.
+
+Sur le Dell, vérifier l'analyse des paramètres globaux :
+
+```bash
+sudo /usr/sbin/sshd -t
+sudo /usr/sbin/sshd -T | grep -E '^(passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|permitrootlogin) '
+```
+
+`sshd -T` sans argument `-C` ne garantit pas les paramètres
+applicables à des règles `Match`. Après confirmation de la connexion
+par clé depuis un autre poste et d'un accès console de secours,
+préparer une politique SSH restrictive, valider la configuration et
+tester une seconde session **avant** d'envisager un rechargement du
+service. Ne pas activer UFW sans définir des règles spécifiques qui
+préservent SSH et WireGuard.
+
+### Vérification de la publication NAT actuelle
+
+Le HTTP 200 déjà reçu depuis `10.77.0.1` vers `10.77.0.2:8080`
+démontre que le tunnel transporte ce trafic. Il ne prouve pas le
+chemin Internet vers `54.37.165.151:8080`. Faire un unique test
+depuis 4G/5G ou un autre réseau extérieur avant de conclure au bon
+fonctionnement de la publication NAT.
+
+Le passage en mode routé doit mettre à jour l'état persistant OVH et Dell
+**de manière coordonnée** ; ne pas se contenter d'opérations `ip`
+éphémères. En attendant, conserver la règle NAT et le tunnel.
