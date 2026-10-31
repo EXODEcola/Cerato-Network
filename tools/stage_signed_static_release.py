@@ -67,6 +67,8 @@ def validate(release_dir:Path,channel_dir:Path,public_key:Path,channel:str,
         raise StagePublicationError("Prerelease interdite sur stable")
     if channel=="dev" and "-dev." not in version:
         raise StagePublicationError("Le canal Dev exige -dev.N")
+    if channel=="beta" and "-beta." not in version:
+        raise StagePublicationError("Le canal beta exige -beta.N")
     pointer_bytes=_read_regular(Path(channel_dir)/(channel+".json"),MAX_INDEX)
     pointer_signature=_read_regular(Path(channel_dir)/(channel+".sig"),MAX_SIGN)
     verify_signature(pointer_bytes,pointer_signature,key)
