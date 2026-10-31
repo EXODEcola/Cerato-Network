@@ -70,12 +70,8 @@ class PrivateRehearsalTests(unittest.TestCase):
             root=Path(directory)
             src,base,inv,http=self.make_source(root)
             before={p.name:p.read_bytes() for p in src.rglob("*") if p.is_file()}
-            with patch("rehearse_native_auth.inspect_source",return_value=inv),\
-                 patch("rehearse_native_auth.inspect_handlers",return_value=http),\
-                 patch("rehearse_native_auth.tempfile.TemporaryDirectory",
-                       wraps=tempfile.TemporaryDirectory) as tmp:
-                report=rehearse(src,baseline=base,inspect_source=lambda *_:inv,
-                               inspect_handlers=lambda *_:http)
+            report=rehearse(src,baseline=base,inspect_source=lambda *_:inv,
+                           inspect_handlers=lambda *_:http)
             self.assertTrue(report["candidate_compiled"])
             self.assertTrue(report["private_stage_deleted"])
             self.assertFalse(report["production_modified"])
