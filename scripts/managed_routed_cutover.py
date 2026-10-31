@@ -105,9 +105,9 @@ def snapshot_file(path,name):
     atomic(target,data,0o600)
     return hashlib.sha256(data).hexdigest()
 
-def address_exists(ip,iface):
+def address_exists(ip,iface,only32=True):
     raw=json.loads(command("ip","-j","-4","addr","show","dev",iface))
-    return any(info.get("local")==ip and info.get("prefixlen")==32
+    return any(info.get("local")==ip and (not only32 or info.get("prefixlen")==32)
                for item in raw for info in item.get("addr_info",[])
                if isinstance(info,dict))
 
@@ -155,7 +155,7 @@ def fw_script():
             " }\n}\n")
 
 def peer_preflight():
-    ensure(address_exists("10.77.0.2",WG),"IP tunnel Dell absente")
+    ensure(address_exists("10.77.0.2",WG,only32=False),"IP tunnel Dell absente")
     ensure(not address_exists(PUB,WG),"IPv4 publique déjà attribuée Dell")
     ensure("default dev "+WG in command("ip","-4","route","show","table",TABLE),
            "Route de retour Dell absente")
