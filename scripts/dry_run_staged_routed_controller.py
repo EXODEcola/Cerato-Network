@@ -32,7 +32,7 @@ APPROVED_PATCHED_SHA="4eb69872bf571b678f469eb33dc6cff26f0adf468aa1d98b1b39b943a0
 APPROVED_SUPPORT={
     "cerato_routed_support.py":"760453925d7b3cb2af4165723412bfc4aaaf26be1b036c84f2ad9dbc67b67950",
     "routed_firewall.py":"4f8818bb6ef6873760192c3b7db65d232602ff94a5a51300ae1f5ac40476fc74",
-    "routed_nft_inject.py":"98cfbcc1aaa994ef11aa34ed8ba6fe85aafc2f94ae756aadb968d8acbbf01204",
+    "routed_nft_inject.py":"3f60268c1532d86ddbdd873be5471948636b7455390163044d0851ffe82eb299",
 }
 
 
