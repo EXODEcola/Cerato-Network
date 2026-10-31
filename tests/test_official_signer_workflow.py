@@ -17,6 +17,13 @@ class OfficialSignerWorkflowTests(unittest.TestCase):
                       "github.ref == 'refs/heads/main'",
                       "python3 -m unittest discover"):
             self.assertIn(entry,src)
+        self.assertIn("python3 -m pip install --disable-pip-version-check -r security/requirements.txt",src)
+        self.assertLess(src.index("Installer les dependances de test"),src.index("Tests complets AVANT signature"))
+        self.assertLess(src.index("Tests complets AVANT signature"),src.index("Installer la cle uniquement"))
+        # Never expose the Ed25519 secret at job level to arbitrary test code.
+        secret_line="SIGNING_PRIVATE_PEM: ${{ secrets.CERATO_ED25519_PRIVATE_PEM }}"
+        self.assertEqual(src.count(secret_line),1)
+        self.assertGreater(src.index(secret_line),src.index("- name: Installer la cle uniquement"))
         self.assertLess(src.index("stage_signed_static_release.py"),src.index("gh release create"))
         self.assertNotIn("ssh ",src)
         self.assertNotIn("scp ",src)
