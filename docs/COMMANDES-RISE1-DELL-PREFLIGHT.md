@@ -496,3 +496,48 @@ CI sont réussis. Le script exige toujours le SHA-256 de
 des trois modules. Aucun `nft`, `wg`, `ip`, ni accès SSH
 n'est exécuté. La configuration reste inchangée ; ce test
 n'autorise ni installation ni basculement de l'Additional IPv4.
+
+## Dell R530 — audit détaillé et filtrage de la future IPv4 (31 octobre)
+
+La simulation du moteur nftables sur **OVH RISE-1** est confirmée
+`status=validated-in-memory` avec le contrôleur
+`/tmp/cerato-routed-stage.qRfaZSoQ/patched` et aucun changement réseau.
+
+Le point suivant est l'accès réel et le firewall du **Dell Ubuntu
+24.04.5**. L'outil `scripts/preflight_dell_routed_peer.py` ne fait
+que des lectures (adresse WG, retour par la table 51820, conflit
+priorité 1101, `rp_filter`, `sshd -T`, interfaces Tailscale et ports
+TCP ouverts). Il ne lit pas les clés et ne modifie aucun paramètre.
+Il laisse toujours `ready_to_activate=false`.
+
+Depuis **le Dell connecté en SSH par Tailscale** :
+
+```bash
+cd ~
+if [ ! -d Cerato-Network-preflight/.git ]; then
+  git clone --depth 1 --branch feature/public-ip-path-preflight \
+    https://github.com/EXODEcola/Cerato-Network.git Cerato-Network-preflight
+fi
+cd ~/Cerato-Network-preflight
+git fetch origin feature/public-ip-path-preflight
+git show FETCH_HEAD:scripts/preflight_dell_routed_peer.py \
+  > /tmp/cerato-dell-peer-audit.py
+python3 -m py_compile /tmp/cerato-dell-peer-audit.py
+
+sudo python3 /tmp/cerato-dell-peer-audit.py \
+  --public-ip 54.37.165.151 --vpn-ip 10.77.0.2 \
+  --tunnel wg-cerato --table 51820 --priority 1101
+```
+
+Le champ `ufw_state` est informatif : `inactive` ne démontre
+pas qu'il n'y a aucune autre règle nftables. Une configuration
+firewall dédiée est obligatoire avant l'ouverture Internet.
+`network/dell_public_firewall.py` prépare, sans appliquer, une
+politique INPUT restrictive **uniquement** pour l'adresse publique
+routée : SSH TCP 22 explicitement autorisé, puis DROP sur la /32
+(autres ports à autoriser individuellement, notamment 8080 si le
+service actuellement publié doit rester accessible).
+
+Ne **pas** appliquer ces règles depuis SSH, ni attribuer la /32
+directement, tant que la transaction et le rollback indépendants
+Dell/RISE-1 ne sont pas implémentés et validés.
