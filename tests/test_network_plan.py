@@ -42,6 +42,39 @@ class NetworkPlanTests(unittest.TestCase):
         self.assertNotIn("flush ruleset",rules)
         self.assertNotIn("chain forward",rules)
 
+    def test_routed_public_ipv4_has_no_nat_ports_and_requires_agent_rollback(self):
+        self.plan.add_public_ip("8.8.8.8",provider_confirmed=True,present_on_wan=True)
+        self.plan.route_public_ip("8.8.8.8","node-1")
+        result=self.plan.routed_preview()
+        self.assertEqual(result["mode"],"routed-wg")
+        self.assertFalse(result["applicable"])
+        self.assertEqual(result["gateway"][0]["public_cidr"],"8.8.8.8/32")
+        self.assertEqual(result["gateway"][0]["require_peer_allowed_ips"],
+                         ["10.80.0.2/32","8.8.8.8/32"])
+        self.assertTrue(result["agents"][0]["preserve_existing_default_route"])
+        self.assertTrue(result["agents"][0]["host_firewall_controls_exposed_ports"])
+        self.assertIn("backup_and_timed_rollback_required",result["safety"])
+        self.assertIn("routed_public_ipv4",self.plan.serializable())
+        self.assertNotIn("dnat",self.plan.nft_text().lower())
+        # There is deliberately no per-port mapping in routed /32 mode.
+        with self.assertRaises(NetworkPlanError):
+            self.plan.publish("8.8.8.8","node-1","tcp",8080,8080)
+
+    def test_routed_assignment_is_exclusive_and_requires_validated_pool(self):
+        with self.assertRaises(NetworkPlanError):
+            self.plan.route_public_ip("8.8.8.8","node-1")
+        self.plan.add_public_ip("8.8.8.8",provider_confirmed=True,present_on_wan=True)
+        with self.assertRaises(NetworkPlanError):
+            self.plan.route_public_ip("8.8.8.8","unknown")
+        self.plan.publish("8.8.8.8","node-1","tcp",8080,8080)
+        with self.assertRaises(NetworkPlanError):
+            self.plan.route_public_ip("8.8.8.8","node-1")
+        self.plan.publications.clear()
+        self.plan.route_public_ip("8.8.8.8","node-1")
+        with self.assertRaises(NetworkPlanError):
+            self.plan.route_public_ip("8.8.8.8","node-1")
+        self.assertEqual(len(self.plan.routed_preview()["gateway"]),1)
+
     def test_reject_injection_and_outside_cidr(self):
         with self.assertRaises(NetworkPlanError):
             Plan(wan_iface='eth0"; flush ruleset',tunnel_iface="wg0",
