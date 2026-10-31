@@ -75,8 +75,8 @@ def transform(raw):
         if (isinstance(node,ast.Expr) and isinstance(node.value,ast.Call) and
             isinstance(node.value.func,ast.Attribute) and
             node.value.func.attr=="write_text" and
-            _simple_name(node.value.args[0],"original")
-            if node.value.args else False):
+            len(node.value.args)==1 and
+            _simple_name(node.value.args[0],"original")):
             positions.append(index)
     if len(positions)!=1:
         raise StageError("Écriture WireGuard non reconnue")
