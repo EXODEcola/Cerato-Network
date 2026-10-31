@@ -35,6 +35,17 @@ class IsolatedStore:
     def require_permission(self,actor,permission):
         if actor["role"]=="user" and permission!="view":
             raise Forbidden("Read-only")
+    def manage_account(self,actor,target_id,**fields):
+        self.actions.append(("account-edit",target_id,dict(fields)))
+        return {"id":target_id,"email":"admin@example.test",
+                "role":fields.get("role","admin"),"active":True}
+    def delete_account(self,actor,target_id):
+        self.actions.append(("account-delete",target_id))
+    def change_own_identity(self,actor,current_password,**fields):
+        if current_password!="current-password":
+            raise InvalidCredentials("wrong password")
+        self.actions.append(("profile-edit",dict(fields)))
+        return {"id":actor["id"],"email":"changed@example.test","role":actor["role"],"active":True}
     def is_initialized(self):return True
     def login(self,email,password,source_ip):
         if password!="test-password":
@@ -160,6 +171,50 @@ class EndToEndLocalHTTPBridgeTests(unittest.TestCase):
         self.assertIn("csrf",payload)
         self.assertNotIn("session",payload)
         self.assertEqual(self.store.actions,before)
+
+    def test_native_patch_and_delete_work_without_historical_verb_handlers(self):
+        # RISE-1 has only do_GET/do_POST; new auth verbs must still exist.
+        self.store.role="owner"
+        self.store.actions=[]
+        code,payload=self.invoke("/api/accounts/2","PATCH",
+            {"role":"user"},cookie="current-session",csrf="current-csrf",
+            origin=ORIGIN)
+        self.assertEqual(code,200)
+        self.assertEqual(payload["account"]["role"],"user")
+        self.assertIn(("account-edit",2,{"role":"user"}),self.store.actions)
+        code,_=self.invoke("/api/accounts/2","DELETE",{},
+            cookie="current-session",csrf="current-csrf",origin=ORIGIN)
+        self.assertEqual(code,200)
+        self.assertIn(("account-delete",2),self.store.actions)
+        code,payload=self.invoke("/api/auth/me","PATCH",{
+            "current_password":"current-password","email":"changed@example.test"},
+            cookie="current-session",csrf="current-csrf",origin=ORIGIN)
+        self.assertEqual(code,200)
+        self.assertTrue(payload["reauth_required"])
+        self.assertTrue(any(action[0]=="profile-edit" for action in self.store.actions))
+
+    def test_new_http_verbs_denied_on_old_network_routes_or_bad_csrf(self):
+        self.store.role="owner"
+        self.store.actions=[]
+        for method,route,body in (
+            ("PATCH","/api/nat/add",{}),
+            ("DELETE","/api/nat/remove",{}),
+            ("PATCH","/api/accounts/2",{"role":"admin","owner":True}),
+        ):
+            code,_=self.invoke(route,method,body,cookie="current-session",
+                               csrf="current-csrf",origin=ORIGIN)
+            self.assertIn(code,(403,405))
+            self.assertEqual(self.store.actions,[])
+        code,_=self.invoke("/api/accounts/2","PATCH",{"role":"user"},
+                           cookie="current-session",csrf="old",origin=ORIGIN)
+        self.assertEqual(code,403)
+        self.assertEqual(self.store.actions,[])
+        self.store.role="user"
+        code,_=self.invoke("/api/accounts/2","DELETE",{},
+                           cookie="current-session",csrf="current-csrf",
+                           origin=ORIGIN)
+        self.assertEqual(code,403)
+        self.assertEqual(self.store.actions,[])
 
     def test_unreviewed_routes_deny_before_legacy(self):
         self.store.role="owner"
