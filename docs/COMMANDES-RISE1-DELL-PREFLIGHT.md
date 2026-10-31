@@ -299,3 +299,51 @@ de même le rapport avant partage** : les noms de variables et
 l'architecture logicielle sont visibles même si les valeurs des
 chaînes ne le sont pas. En cas d'empreinte différente, elle refuse
 l'analyse sans réappliquer le réseau.
+
+## Préparer une copie isolée du contrôleur réel (aucune installation)
+
+Le rapport AST vérifié a montré que `render_nft(data)` termine par
+le retour du rendu, et que `rewrite_wg_peers(data)` écrit la variable
+`original` dans un fichier temporaire avant `os.replace`.
+Le correctif AST injecte uniquement deux appels dans ces fonctions,
+plus une bibliothèque de rendu pur. Il conserve les anciennes règles
+NAT et les anciens pairs si `routed_ipv4` est absent ou vide.
+
+**Important :** le résultat est une copie de développement, PAS une
+release prête à installer. Ne pas copier les fichiers générés dans
+`/usr/local/sbin/` ou `/opt/cerato-network/`.
+
+Sur RISE-1, depuis le dépôt Git actuel :
+
+```bash
+set -o pipefail
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+
+git show origin/feature/public-ip-path-preflight:scripts/stage_live_routed_controller.py \
+  > /tmp/cerato-stage-controller.py
+
+STAGE="$(sudo mktemp -d /tmp/cerato-routed-stage.XXXXXXXX)"
+sudo install -d -m 0700 "$STAGE/support"
+
+for f in live_routed_compat.py routed_nft_inject.py routed_firewall.py; do
+  git show "origin/feature/public-ip-path-preflight:network/$f" \
+    | sudo tee "$STAGE/support/$f" >/dev/null
+done
+
+sudo python3 /tmp/cerato-stage-controller.py \
+  --source /usr/local/sbin/ceratoctl \
+  --controller-sha 41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6 \
+  --support-dir "$STAGE/support" \
+  --destination "$STAGE/patched"
+
+sudo python3 -m py_compile "$STAGE/patched/ceratoctl" \
+  "$STAGE/patched/cerato_routed_support.py" \
+  "$STAGE/patched/routed_nft_inject.py" \
+  "$STAGE/patched/routed_firewall.py"
+```
+
+Ce code ne lance aucune fonction du vrai contrôleur, ne change
+aucun service et refuse une empreinte modifiée. L'étape suivante
+reste la validation du rendu complet sous préproduction avant
+de créer un vrai installateur avec sauvegarde, rollback et watchdog.
