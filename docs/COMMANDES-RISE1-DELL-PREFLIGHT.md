@@ -347,3 +347,50 @@ Ce code ne lance aucune fonction du vrai contrôleur, ne change
 aucun service et refuse une empreinte modifiée. L'étape suivante
 reste la validation du rendu complet sous préproduction avant
 de créer un vrai installateur avec sauvegarde, rollback et watchdog.
+
+## Contrôle statique de la copie effectivement créée sur RISE-1
+
+Le `stage_live_routed_controller.py` a retourné `staged-only`,
+`network_modified=false`, source
+`41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6`
+et copie
+`4eb69872bf571b678f469eb33dc6cff26f0adf468aa1d98b1b39b943a02fa793`.
+Le dossier réellement créé était
+`/tmp/cerato-routed-stage.Gwi10hKO/patched`.
+
+Le validateur ci-dessous contrôle les empreintes, la propriété
+root et les permissions des quatre fichiers, les deux appels
+AST d'insertion réseau, ainsi que l'identité octet par octet des
+modules d'origine. Il **ne charge ni n'exécute** le `ceratoctl`
+préparé ni les modules, ne touche pas à l'IP, et ne prouve pas la
+fonctionnalité du routage réel.
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show origin/feature/public-ip-path-preflight:scripts/verify_staged_routed_controller.py \
+  > /tmp/cerato-verify-routed-stage.py
+sudo python3 /tmp/cerato-verify-routed-stage.py \
+  --stage /tmp/cerato-routed-stage.Gwi10hKO/patched \
+  --support-dir /tmp/cerato-routed-stage.Gwi10hKO/support \
+  --patched-sha 4eb69872bf571b678f469eb33dc6cff26f0adf468aa1d98b1b39b943a02fa793
+```
+
+Résultat attendu : `status=review-only-verified`,
+`ready_to_install=false`, `network_modified=false`.
+
+### Convergence des deux états persistants
+
+En amont du basculement, l'état
+`additional-ip-managed.json` représente une /32 routée sous
+`{"ip":...,"peer":...,"wan":...}`, tandis que le contrôleur historique
+doit lire une allocation `{"ip":...,"peer":...}` de sa propre
+configuration. Le nouveau contrat pur
+`network/routed_state_agreement.py` **refuse toute divergence** et
+tout alias local ou NAT encore actif sur l'adresse routée. Il fournit
+au rendu le `management_ipv4` relevé sur la route WAN effective,
+non depuis une entrée utilisateur.
+
+Cela reste un contrat de validation sans lecture/écriture système.
+Une future transaction privilégiée devra synchroniser les deux
+sources de vérité et vérifier le rollback avant toute publication.
