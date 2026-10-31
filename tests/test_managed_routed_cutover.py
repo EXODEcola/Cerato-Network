@@ -1,0 +1,81 @@
+"""Regression guards for the staged production cutover. No host commands executed."""
+from __future__ import annotations
+from unittest import TestCase
+from unittest.mock import patch
+from pathlib import Path
+import importlib.util
+import sys
+
+PATH=Path(__file__).resolve().parents[1]/"scripts"/"managed_routed_cutover.py"
+spec=importlib.util.spec_from_file_location("managed_routed_cutover",PATH)
+installer=importlib.util.module_from_spec(spec)
+sys.modules[spec.name]=installer
+spec.loader.exec_module(installer)
+
+PUB="54.37.165.151"
+WAN="enp1s0f0"
+
+class ManagedCutoverTests(TestCase):
+    def test_peer_firewall_only_allows_ssh_and_established_to_public_via_wg(self):
+        raw=installer.fw_script()
+        self.assertIn('iifname "wg-cerato" ip daddr '+PUB+' tcp dport 22 accept',raw)
+        self.assertIn('iifname "wg-cerato" ip daddr '+PUB+' drop',raw)
+        self.assertLess(raw.index("tcp dport 22 accept"),raw.index(PUB+" drop"))
+        self.assertNotIn("flush ruleset",raw)
+        self.assertNotIn("tailscale0",raw)
+        self.assertNotIn("192.168.",raw)
+
+    def test_gateway_only_moves_exact_additional_ip_without_affecting_others(self):
+        config={
+            "wan_if":"enp1s0f0","wg_if":"wg-cerato","pool":[PUB,"54.37.165.160"],
+            "peers":{"dell":{"ip":"10.77.0.2","pubkey":"synthetic"}},
+            "mappings":[
+                {"public_ip":PUB,"proto":"tcp","public_port":8080,
+                 "target_port":8080,"peer":"dell"},
+                {"public_ip":"54.37.165.160","proto":"tcp","public_port":8443,
+                 "target_port":443,"peer":"dell"}],
+        }
+        managed={"schema":1,"local_ipv4":[
+            {"ip":PUB,"wan":WAN,"preexisting":True},
+            {"ip":"54.37.165.160","wan":WAN,"preexisting":True}
+        ],"routed_ipv4":[]}
+        def reader(path):
+            if path==installer.CFG:return config
+            if path==installer.STATE:return managed
+            raise AssertionError("Unrecognized file")
+        with patch.object(installer,"json_read",side_effect=reader):
+            result_cfg,result_state=installer.planned_configs("dell")
+        self.assertEqual(result_cfg["routed_ipv4"],[{"ip":PUB,"peer":"dell"}])
+        self.assertEqual(result_state["routed_ipv4"],
+                         [{"ip":PUB,"peer":"dell","wan":WAN}])
+        self.assertEqual(len(result_cfg["mappings"]),1)
+        self.assertEqual(result_cfg["mappings"][0]["public_ip"],"54.37.165.160")
+        self.assertEqual(len(result_state["local_ipv4"]),1)
+        self.assertEqual(len(config["mappings"]),2)
+        self.assertEqual(len(managed["local_ipv4"]),2)
+        self.assertNotIn("management_ipv4",config)
+        self.assertEqual(result_cfg["management_ipv4"],installer.ADMIN)
+
+    def test_invalid_duplicate_local_record_fails_closed(self):
+        managed={"local_ipv4":[{"ip":PUB},{"ip":PUB}],"routed_ipv4":[]}
+        cfg={"mappings":[{"public_ip":PUB}]}
+        with patch.object(installer,"json_read",side_effect=lambda p:cfg if p==installer.CFG else managed):
+            with self.assertRaises(installer.CutoverError):
+                installer.planned_configs("dell")
+
+    def test_two_separate_persistent_rollback_deadlines(self):
+        self.assertGreater(installer.DEADLINE_PEER,installer.DEADLINE_GATEWAY)
+        self.assertGreaterEqual(installer.DEADLINE_GATEWAY,20)
+
+    def test_source_controller_pinned_to_live_observed_sha(self):
+        self.assertEqual(installer.SOURCE_SHA,
+            "41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6")
+        self.assertEqual(installer.ADMIN,"51.210.223.57")
+        self.assertEqual(installer.VPN,"10.77.0.2")
+        self.assertEqual(installer.RULE_PRIORITY,1101)
+
+    def test_no_automatic_live_change_on_import(self):
+        self.assertTrue(callable(installer.prepare))
+        self.assertTrue(callable(installer.activate))
+        self.assertTrue(callable(installer.rollback))
+        self.assertTrue(callable(installer.persist))
