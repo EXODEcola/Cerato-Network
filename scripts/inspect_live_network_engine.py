@@ -36,7 +36,12 @@ def inspect(path):
     result["source_bytes"]=len(raw)
     result["sha256"]=hashlib.sha256(raw).hexdigest()
     try:
-        tree=ast.parse(raw.decode("utf-8"))
+        text=raw.decode("utf-8")
+        first=text.splitlines()[0] if text.splitlines() else ""
+        if first.startswith("#!") and "python" not in first.lower():
+            result["error"]="Interpréteur non Python déclaré par le fichier"
+            return result
+        tree=ast.parse(text)
     except (SyntaxError,UnicodeError,ValueError):
         result["error"]="Source non Python ou syntaxe invalide"
         return result
