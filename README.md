@@ -32,7 +32,7 @@
 Dépôt GitHub public (sources et versions)
                  |
                  v
-VPS de build indépendant (tests, packages, signatures)
+GitHub Actions (tests / signature protégée) + Build indépendant
                  |
                  v
 Hébergement HTTPS des archives signées
@@ -44,24 +44,24 @@ Passerelle Cerato Network (validation, sauvegarde, déploiement)
 Agents installés sur les nœuds connectés (mise à jour contrôlée)
 ```
 
-**Aucune compilation, compression ou signature via GitHub Actions.** Toute la chaîne de build s'exécute sur une infrastructure externe choisie par l'administrateur. Voir [documentation du déploiement](docs/DEPLOIEMENT.md).
+**Cerato Build reste indépendant : aucune commande ni runner GitHub Actions ne le reconfigure.** Les tests, la préparation de la première release CSS-only et sa signature Ed25519 peuvent être effectués par GitHub Actions dans l’environnement protégé `cerato-network-signing`, après provisionnement de la clé et validation du code sur `main`. L’archive signée est publiée sur GitHub Releases ; OVH la synchronise puis la vérifie avant de l’afficher dans le centre de mises à jour. Le backend réseau et l'authentification historique ne sont pas remplacés par cette première release. Voir [la procédure de signature](docs/PUBLICATION-GITHUB-SIGNEE.md).
 
 ## Développement
 
-La branche `main` est la base documentaire publique et la branche `feature/secure-accounts` contient la première implémentation des comptes, des permissions et des tests. Voir [la proposition en cours](https://github.com/EXODEcola/Cerato-Network/pull/1).
+La branche `main` porte le code revu et les scripts de distribution ; les fonctions Owner/Admin/User + 2FA restent **non activées sur le backend RISE-1** jusqu’à une migration contrôlée. La première release CSS-only ne touche pas à ces fonctions.
 
 Sur une machine **de développement isolée** (pas un RISE-1 ou une passerelle de production) :
 
 ```bash
 git clone https://github.com/EXODEcola/Cerato-Network.git
 cd Cerato-Network
-git switch feature/secure-accounts
+git switch main
 bash scripts/bootstrap-dev.sh
 ```
 
 Pour les mises à jour suivantes, depuis ce même dossier : `bash scripts/update-dev.sh`. **Ne jamais recloner un dépôt à l'intérieur de lui-même.**
 
-**Ces commandes ne déploient pas la passerelle.** Les 39 premiers tests publiés avant l'ajout du staging signé ont été validés par un testeur ; les tests des commits plus récents restent à exécuter sur la machine de build. Voir [le développement MFA](docs/DEPLOIEMENT.md) et la [PR en cours](https://github.com/EXODEcola/Cerato-Network/pull/1).
+**Ces commandes ne déploient pas la passerelle.** GitHub Actions exécute les tests automatiquement ; leur réussite ne valide ni une migration des comptes sur RISE-1, ni une release signée en production.
 
 ## Tests concrets de préproduction
 

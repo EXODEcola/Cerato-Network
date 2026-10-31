@@ -1,0 +1,81 @@
+name: Cerato Network - Tests de developpement
+
+# Une seule validation par push sur la branche de travail et sur main.
+# Pas de déclenchement pull_request en double ; les checks de commit
+# restent visibles sur la pull request.
+on:
+  push:
+    branches: [feature/secure-accounts, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cerato-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-and-compatibility:
+    name: Auth, API, reseau simule et compatibilite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: security/requirements.txt
+      - name: Installer les dependances de test (CI seulement)
+        run: python -m pip install -r security/requirements.txt
+      - name: Syntaxe Python
+        run: python -m compileall -q security gateway network updates tools tests integrations integration
+      - name: Lancer toutes les suites unitaires
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Syntaxe JavaScript
+        run: |
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
+      - name: Preflight shell des installeurs
+        run: |
+          bash -n scripts/finish-live-panel.sh
+          bash -n scripts/upgrade-live-update-engine.sh
+          bash -n scripts/enable-live-updates.sh
+          bash -n scripts/prepare-same-host-releases.sh
+          bash -n scripts/init-release-signer.sh
+          bash -n scripts/enable-live-update-check.timer.sh
+          bash -n scripts/prepare-approved-tag.sh
+          bash -n scripts/test-on-vps.sh
+
+  build-handoff:
+    name: Préparer les sources testées (non signées) pour Cerato Build
+    needs: [security-and-compatibility]
+    if: ${{ needs.security-and-compatibility.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout du commit testé
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Préparer l'entrée de compilation sans secrets
+        run: |
+          mkdir -p build-handoff
+          git archive --format=tar --prefix=cerato-network/ HEAD | gzip -n > build-handoff/cerato-network-source.tar.gz
+          SOURCE_SHA=$(git rev-parse HEAD)
+          ARCHIVE_SHA=$(sha256sum build-handoff/cerato-network-source.tar.gz | cut -d' ' -f1)
+          printf '{"commit":"%s","archive_sha256":"%s","kind":"source-handoff","signed":false,"installable":false}\n' "$SOURCE_SHA" "$ARCHIVE_SHA" > build-handoff/handoff.json
+          python3 -m json.tool build-handoff/handoff.json >/dev/null
+          test "$(stat -c %s build-handoff/cerato-network-source.tar.gz)" -gt 100
+      - name: Conserver l'entrée de build validée
+        uses: actions/upload-artifact@v4
+        with:
+          name: cerato-network-build-input-${{ github.run_id }}
+          path: build-handoff/
+          if-no-files-found: error
+          retention-days: 7
