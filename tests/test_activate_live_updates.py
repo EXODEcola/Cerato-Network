@@ -47,8 +47,22 @@ class ActivationTests(unittest.TestCase):
              patch.object(m,"provision") as provision:
             result=m.activate()
             self.assertTrue(result["configured"])
-            self.assertEqual(result["status"],"ready")
+            self.assertEqual(result["status"],"published_not_verified")
+            result=m.activate(install=True)
+            self.assertEqual(result["status"],"verification_failed")
             provision.assert_not_called()
+
+    def test_signed_channel_only_ready_after_verified_check(self):
+        verified={"configured":True,"can_check":True,
+                  "channel":"beta","reason_code":"release_ready",
+                  "installable":True}
+        with patch.object(m,"_prerequisites",return_value={
+                "configured":True,"can_check":True}),\
+             patch.object(m,"_tls_probe",return_value=True),\
+             patch.object(m,"_json_ctl",return_value=verified):
+            result=m.activate(install=True)
+            self.assertEqual(result["status"],"ready")
+            self.assertTrue(result["installable"])
 
     def test_never_overwrite_previously_pinned_key(self):
         with patch.object(m,"_prerequisites",return_value={

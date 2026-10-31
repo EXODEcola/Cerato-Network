@@ -124,20 +124,30 @@ def activate(*,install=False,public_key=None,fingerprint=None,channel="beta"):
     # Do not require release existence for provisioning: an empty channel is
     # a future publication dependency, NOT an excuse to fabricate one.
     published=_tls_probe(BASE_URL+"/channels/"+state["channel"]+".json")
-    if published and install:
-        state=_json_ctl("check")
+    result="waiting_for_signed_release"
+    if published:
+        result="published_not_verified"  # HTTP 200 is not cryptographic verification.
+        if install:
+            state=_json_ctl("check")
+            reason=state.get("reason_code")
+            if reason in ("release_ready","already_current"):
+                result="ready"
+            elif reason=="release_not_compatible":
+                result="incompatible_release"
+            else:
+                result="verification_failed"
     after=_network_snapshot()
     if before!=after:
         raise ActivationError("Configuration réseau inattendue modifiée")
-    return {"status":"ready" if published else "waiting_for_signed_release",
+    return {"status":result,
             "source":BASE_URL,"channel":state["channel"],
-            "configured":True,"signed_channel_present":published,
+            "configured":True,"channel_http_present":published,
             "can_check":bool(state.get("can_check")),
-            "installable":bool(state.get("installable")),
+            "installable":bool(state.get("installable")) if result=="ready" else False,
             "network_modified":False,"build_modified":False,
-            "notes":"Les prochaines versions compatibles s'installent depuis l'interface."
-             if published else
-             "Le moteur est raccordé, mais aucune release signée publiée n'a été vérifiée."}
+            "notes":"Le canal est vérifié et les versions compatibles peuvent être installées via le panneau."
+             if result=="ready" else
+             "Distribution non prête de bout en bout : vérifier le canal, la signature et la compatibilité."}
 
 
 def main():
