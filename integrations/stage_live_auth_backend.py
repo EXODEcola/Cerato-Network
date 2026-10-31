@@ -104,9 +104,12 @@ def prepare(backend: Path, destination: Path, *, baseline: Path = BASELINE,
     expected = _load_json(baseline).get("server_sha256")
     patched = transform(source, expected)
     target = destination.resolve()
-    if (destination.exists() or backend.resolve() == target or
-            backend.resolve().parent in target.parents or
-            target in backend.resolve().parents):
+    live_backend = backend.resolve()
+    live_root = (live_backend.parent.parent
+                 if live_backend.parent.name == "backend"
+                 else live_backend.parent)
+    if (destination.exists() or target == live_root or
+            live_root in target.parents or target in live_backend.parents):
         raise StageError("Destination existante ou imbriquée dans l'installation active")
     security_files = {}
     for filename in MODULES:
