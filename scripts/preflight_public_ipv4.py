@@ -176,6 +176,20 @@ def check(read, role, public_ip, tunnel, peer_ip, wan, mode, port):
                                      "ok" if present else "attention",
                                      "IPv4 WireGuard du Dell présente" if present else
                                      "IPv4 WireGuard du Dell absente"))
+        if mode == "local-nat":
+            # With a pure DNAT (no source NAT on the gateway), the Dell receives
+            # the real external client address. Replies must then use the WG
+            # tunnel; a LAN default route would produce asymmetric traffic.
+            # This is only a warning: gateway-side SNAT may change the path.
+            probe("nat_return_route",
+                  lambda: route_device(read, "1.1.1.1", peer_ip),
+                  lambda dev: report(
+                      "nat_return_route",
+                      "ok" if dev == tunnel else "attention",
+                      "Réponse source VPN susceptible de passer par WireGuard"
+                      if dev == tunnel else
+                      "Réponse source VPN envoyée hors WireGuard : risque "
+                      "d'asymétrie sans SNAT sur la passerelle"))
         if mode == "routed-wg":
             probe("public_on_peer",
                   lambda: public_ip in address_set(read, tunnel),
