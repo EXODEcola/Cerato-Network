@@ -84,6 +84,29 @@ class SignedPublicPublisherTests(unittest.TestCase):
         self.assertEqual((self.root/"releases"/V1/"manifest.json").read_bytes(),existing)
         self.assertTrue((self.root/"releases"/V2/"manifest.json").exists())
 
+    def test_public_files_and_channel_folders_resist_umask_077(self):
+        previous=os.umask(0o077)
+        try:
+            self.invoke(apply=True)
+        finally:
+            os.umask(previous)
+        public_dirs=(
+            self.root/".channel-generations",
+            (self.root/"channels").resolve(),
+            self.root/"releases"/V1,
+        )
+        for directory in public_dirs:
+            self.assertEqual(directory.stat().st_mode & 0o777,0o755, str(directory))
+        public_files=(
+            self.root/"channels"/"beta.json",
+            self.root/"channels"/"beta.sig",
+            self.root/"releases"/V1/"manifest.json",
+            self.root/"releases"/V1/"manifest.sig",
+            self.root/"releases"/V1/"cerato-network-release.zip",
+        )
+        for file in public_files:
+            self.assertEqual(file.stat().st_mode & 0o777,0o644,str(file))
+
     def test_signed_release_never_rolls_channel_back(self):
         self.invoke(V2,apply=True)
         with self.assertRaisesRegex(publisher.PublishError,"Retour arrière"):
