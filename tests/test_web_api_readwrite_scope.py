@@ -16,7 +16,7 @@ class WebAPIReadWriteScope(unittest.TestCase):
         self.assertIn("ReadWritePaths=/var/lib/cerato-network-updates",s)
         self.assertIn("ProtectSystem=strict",s)
         self.assertIn("0700",s)
-        self.assertIn("sudo -u \\"$WEB_USER\\" sudo -n \\"$CTL\\" status",s)
+        self.assertIn('sudo -u "$WEB_USER" sudo -n "$CTL" status',s)
         self.assertIn("systemctl daemon-reload",s)
         self.assertIn('systemctl restart "$UNIT"',s)
         self.assertIn('[[ "$(network_hash)" == "$BEFORE" ]]',s)
