@@ -43,6 +43,12 @@ WG="wg-cerato"
 TABLE="51820"
 RULE_PRIORITY=1101
 SOURCE_SHA="41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6"
+PATCHED_SHA="4eb69872bf571b678f469eb33dc6cff26f0adf468aa1d98b1b39b943a02fa793"
+HELPER_SHA={
+    "live_routed_compat.py":"760453925d7b3cb2af4165723412bfc4aaaf26be1b036c84f2ad9dbc67b67950",
+    "routed_nft_inject.py":"3f60268c1532d86ddbdd873be5471948636b7455390163044d0851ffe82eb299",
+    "routed_firewall.py":"4f8818bb6ef6873760192c3b7db65d232602ff94a5a51300ae1f5ac40476fc74",
+}
 CONTROLLER=Path("/usr/local/sbin/ceratoctl")
 CFG=Path("/etc/cerato-network/config.json")
 STATE=Path("/etc/cerato-network/additional-ip-managed.json")
@@ -213,6 +219,8 @@ def stage_controller():
     stage=BASE/"patched"
     stage.mkdir(mode=0o700,exist_ok=False)
     patched=transform(raw)
+    ensure(hashlib.sha256(patched).hexdigest()==PATCHED_SHA,
+           "Transformateur AST non conforme à la copie RISE-1 validée")
     atomic(stage/"ceratoctl",patched)
     helpers=BASE/"support"
     for src,dst in (("live_routed_compat.py","cerato_routed_support.py"),
@@ -296,7 +304,11 @@ def prepare(role,support_dir):
             for item in (*EXPECTED_SUPPORT,"stage_live_routed_controller.py"):
                 src=Path(support_dir)/item
                 ensure(src.is_file() and not src.is_symlink(),"Module de déploiement absent")
-                atomic(dst/item,src.read_bytes())
+                contents=src.read_bytes()
+                if item in HELPER_SHA:
+                    ensure(hashlib.sha256(contents).hexdigest()==HELPER_SHA[item],
+                           "Empreinte module Cerato incompatible: "+item)
+                atomic(dst/item,contents)
             stage_controller()
             candidate,managed=planned_configs(name)
             rules=generate_routed_rules(candidate)
