@@ -59,6 +59,11 @@ def _root(path):
             raise PublishError("Répertoire de releases non protégé")
 
 
+def _require_root_owned(path):
+    if path.stat().st_uid!=0 or path.stat().st_mode & 0o022:
+        raise PublishError("Répertoire des générations non approuvé")
+
+
 def _write(path,data):
     fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o644)
     with os.fdopen(fd,"wb") as target:
@@ -156,8 +161,7 @@ def publish(release_dir,channel_dir,*,root=PUBLIC_ROOT,config=TRUST_CONFIG,
     if store.is_symlink():
         raise PublishError("Emplacement des générations symbolique")
     store.mkdir(mode=0o755,exist_ok=True)
-    if store.stat().st_uid!=0 or store.stat().st_mode & 0o022:
-        raise PublishError("Répertoire des générations non approuvé")
+    _require_root_owned(store)
     stamp=str(time.time_ns())+"-"+str(os.getpid())
     generation=store/("generation-"+stamp)
     generation.mkdir(mode=0o755)
