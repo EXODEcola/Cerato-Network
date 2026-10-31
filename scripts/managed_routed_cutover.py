@@ -457,7 +457,8 @@ def persist(role):
     state_save(info)
     command("systemctl","disable","--now",timer_name(role)+".timer")
     return {"status":"committed","role":role,"persistent_service":target.name,
-            "global_default_route_changed":False}
+            "global_default_route_changed":False,
+            "note":"Les services doivent écouter sur 0.0.0.0 ou sur l'IPv4 publique. Pour une sortie avec cette IP, l'application doit utiliser cette source."}
 
 def restore(role):
     info=read_state(role)
@@ -486,9 +487,13 @@ def restore(role):
             command("ip","-4","route","replace",PUB+"/32","dev",WG)
         if address_exists(PUB,WAN):
             command("ip","-4","addr","del",PUB+"/32","dev",WAN)
-        # All rules, including routed exemptions before legacy drops,
-        # are regenerated from the staged, hash-pinned Cerato renderer.
+        # An initial boot can occur before Cerato's nftables table exists.
+        # The restored ruleset is generated from the pinned controller.
         rules=(BASE/"nft.routed").read_text()
+        if command("nft","list","table","ip","cerato_network",check=False).returncode:
+            prefix="delete table ip cerato_network\n"
+            ensure(rules.startswith(prefix),"Rendu nft persistant inattendu")
+            rules=rules[len(prefix):]
         command("nft","-f","/dev/stdin",input=rules)
     return {"status":"persistent_restored","role":role}
 
