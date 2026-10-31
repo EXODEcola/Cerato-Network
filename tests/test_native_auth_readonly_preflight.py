@@ -47,6 +47,8 @@ class NativeAuthReadOnlyPreflightTests(unittest.TestCase):
                 unit_checker=lambda:service,
                 login_checker=lambda:{"inspection":"structural","http_basic_declared":True})
         self.assertFalse(report["production_cutover_ready"])
+        self.assertFalse(report["baseline_backend_matches"])
+        self.assertFalse(report["baseline_frontend_matches"])
         self.assertFalse(report["live_code_exported"])
         self.assertFalse(report["secret_values_exported"])
         self.assertIn("live_source_not_identical_to_reviewed_baseline",report["blockers"])
