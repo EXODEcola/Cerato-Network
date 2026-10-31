@@ -34,7 +34,10 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
           [[ "$CERATO_TRUSTED_TAG_FINGERPRINT" =~ ^[A-Fa-f0-9]{40}([A-Fa-f0-9]{24})?$ ]]
-          git verify-tag --raw "$GITHUB_REF_NAME" >/dev/null 2>&1
+          TRUSTED_FP="${CERATO_TRUSTED_TAG_FINGERPRINT^^}"
+          VERIFY_OUTPUT="$(git verify-tag --raw "$GITHUB_REF_NAME" 2>&1)"
+          printf '%s\n' "$VERIFY_OUTPUT" | grep -Eq "\\[GNUPG:\\] VALIDSIG ${TRUSTED_FP}([[:space:]]|$)"
+          test "$(git rev-parse HEAD^{commit})" = "$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
       - name: Environnement Python hors checkout
         shell: bash
         run: |

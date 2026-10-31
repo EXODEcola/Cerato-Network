@@ -14,6 +14,8 @@ class CeratoBuildRunnerContractTests(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, Linux, X64, cerato-build]",workflow)
         self.assertIn("prepare-approved-tag.sh",workflow)
         self.assertIn("persist-credentials: false",workflow)
+        self.assertIn("VALIDSIG",workflow)
+        self.assertLess(workflow.index("VALIDSIG"),workflow.index("-m pip install"))
         self.assertIn('test ! -e "$OUT/manifest.sig"',workflow)
         for forbidden in ("--signing-key","ssh ","scp ","systemctl restart",
                           "cerato-updatectl install","release-source.json"):
