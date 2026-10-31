@@ -65,6 +65,15 @@ class PrivateStorageProvisioningTests(unittest.TestCase):
                 provision(target,uid=os.geteuid(),gid=os.getegid()+1,install=True)
             self.assertEqual(target.stat().st_gid,os.getegid())
 
+    def test_staged_systemd_fragment_keeps_strict_filesystem_sandbox(self):
+        config=(ROOT/"deploy/cerato-native-auth-storage.conf").read_text()
+        active=[line.strip() for line in config.splitlines()
+                if line.strip() and not line.lstrip().startswith("#")]
+        self.assertEqual(active,[
+            "[Service]","ReadWritePaths=/var/lib/cerato-network-auth"])
+        self.assertNotIn("ProtectSystem=off",config)
+        self.assertNotIn("NoNewPrivileges=no",config)
+
     def test_no_migration_or_service_mutation_implemented(self):
         code=(ROOT/"integrations/prepare_private_auth_storage.py").read_text()
         for unsafe in ("AuthStore(", "issue_bootstrap_token(", "setup_owner(",
