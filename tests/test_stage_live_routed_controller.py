@@ -95,11 +95,13 @@ class StagingTests(unittest.TestCase):
     def test_stage_copy_executes_pure_compat_in_sandbox(self):
         home,source,helper,dest,sha=self._env()
         with patch.object(stage,"SOURCE",source),patch.object(
-                stage,"EXPECTED_CONTROLLER_SHA",sha),patch.object(
-                stage,"stage",wraps=stage.stage) as _stage:
-            # Stage only permits a private /tmp destination; this test
-            # exercises transform, then executes synthetic functions only.
-            patched=stage.transform(source.read_bytes())
+                stage,"EXPECTED_CONTROLLER_SHA",sha):
+            report=stage.stage(source,dest,helper,sha)
+        self.assertEqual(report["status"],"staged-only")
+        self.assertFalse(report["ready_to_install"])
+        self.assertFalse(report["network_modified"])
+        self.assertTrue((dest/"cerato_routed_support.py").is_file())
+        patched=(dest/"ceratoctl").read_bytes()
         sandbox={}
         # Python will import support modules from the test repo's network dir.
         # No WireGuard/nftables commands run in this test.
