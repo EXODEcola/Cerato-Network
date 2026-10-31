@@ -146,7 +146,8 @@ def _pure_adapter(stage):
             sys.modules[name]=mod
             spec.loader.exec_module(mod)
         helper=sys.modules["cerato_routed_support"]
-        return helper.routed_render_nft
+        injector=sys.modules["routed_nft_inject"]
+        return helper.routed_render_nft,injector.guarded_public_ips
     finally:
         sys.dont_write_bytecode=old_bytecode
         for name,prev in before.items():
@@ -204,7 +205,8 @@ def simulate(stage, ip, vpn_ip,management,*,controller=CONTROLLER,
 
     original_render=_render_function(original)
     patched_render=_render_function(patched,modified=True)
-    patched_render.__globals__["routed_render_nft"]=_pure_adapter(stage)
+    adapter,guarded_public_ips=_pure_adapter(stage)
+    patched_render.__globals__["routed_render_nft"]=adapter
 
     baseline=original_render(deepcopy(cfg))
     re_render=patched_render(deepcopy(cfg))
@@ -221,9 +223,18 @@ def simulate(stage, ip, vpn_ip,management,*,controller=CONTROLLER,
     routed=patched_render(future)
     in_rule=f'iifname "{cfg["wan_if"]}" oifname "{cfg["wg_if"]}" ip daddr {ip} accept'
     out_rule=f'iifname "{cfg["wg_if"]}" oifname "{cfg["wan_if"]}" ip saddr {ip} accept'
-    guard=f'iifname "{cfg["wan_if"]}" ip daddr {ip} drop'
-    if in_rule not in routed or out_rule not in routed or guard not in routed:
-        raise SimulationError("Règles /32 routées ou INPUT absentes")
+    # The live controller uses a pool-based nft literal IPv4 set:
+    # ip daddr { 54.37.165.151, ... } drop. Verify that the precise
+    # original INPUT guard survives the conversion unchanged.
+    try:
+        original_protection=guarded_public_ips(baseline,cfg["wan_if"])
+        final_protection=guarded_public_ips(routed,cfg["wan_if"])
+    except ValueError as exc:
+        raise SimulationError("Protection INPUT non vérifiable") from exc
+    if (in_rule not in routed or out_rule not in routed
+            or ip not in final_protection[0]
+            or original_protection!=final_protection):
+        raise SimulationError("Règles /32 routées ou protection INPUT modifiée")
     if re.search(re.escape(ip)+r"\s+tcp dport \d+ dnat to",routed):
         raise SimulationError("DNAT ancienne toujours présente")
     return {
