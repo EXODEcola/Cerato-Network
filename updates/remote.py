@@ -150,6 +150,8 @@ def _channel_index(base_url: str, channel: str, key: Path, transport=None, now=N
             raise DistributionError("Prerelease interdite sur stable")
         if channel=="dev" and "-dev." not in version:
             raise DistributionError("Le canal dev exige une version -dev.N")
+        if channel=="beta" and "-beta." not in version:
+            raise DistributionError("Le canal beta exige une version -beta.N")
         issued=payload.get("issued_at")
         expires=payload.get("expires_at")
         when=int(time.time()) if now is None else int(now)
