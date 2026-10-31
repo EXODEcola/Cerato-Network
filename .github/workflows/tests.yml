@@ -49,7 +49,7 @@ jobs:
           bash -n scripts/init-release-signer.sh
 
   build-handoff:
-    name: Préparer les sources approuvées pour Cerato Build
+    name: Préparer les sources testées (non signées) pour Cerato Build
     needs: [security-and-compatibility]
     if: ${{ needs.security-and-compatibility.result == 'success' }}
     runs-on: ubuntu-24.04
@@ -57,7 +57,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout du commit validé
+      - name: Checkout du commit testé
         uses: actions/checkout@v4
         with:
           persist-credentials: false
