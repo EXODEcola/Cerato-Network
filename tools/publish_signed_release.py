@@ -69,6 +69,9 @@ def _write(path,data):
     with os.fdopen(fd,"wb") as target:
         target.write(data)
         target.flush()
+        # The mirror runs with umask 077. Signed artifacts are deliberately
+        # public GET/HEAD files: chmod explicitly, never inherit root's umask.
+        os.fchmod(target.fileno(),0o644)
         os.fsync(target.fileno())
 
 
@@ -162,9 +165,11 @@ def publish(release_dir,channel_dir,*,root=PUBLIC_ROOT,config=TRUST_CONFIG,
         raise PublishError("Emplacement des générations symbolique")
     store.mkdir(mode=0o755,exist_ok=True)
     _require_root_owned(store)
+    os.chmod(store,0o755)
     stamp=str(time.time_ns())+"-"+str(os.getpid())
     generation=store/("generation-"+stamp)
     generation.mkdir(mode=0o755)
+    os.chmod(generation,0o755)
     old[channel+".json"]=files["channels/"+channel+".json"]
     old[channel+".sig"]=files["channels/"+channel+".sig"]
     for name,data in old.items():
