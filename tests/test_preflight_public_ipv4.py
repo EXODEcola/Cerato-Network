@@ -20,13 +20,15 @@ WAN = "ens3"
 
 class FakeRead:
     def __init__(self, *, routed=False, public_on_wan=True,
-                 public_on_peer=False, active=True, port_listening=True):
+                 public_on_peer=False, active=True, port_listening=True,
+                 ssh_hardened=False):
         self.calls = []
         self.routed = routed
         self.public_on_wan = public_on_wan
         self.public_on_peer = public_on_peer
         self.active = active
         self.port_listening = port_listening
+        self.ssh_hardened = ssh_hardened
 
     def __call__(self, argv):
         self.calls.append(tuple(argv))
@@ -70,6 +72,15 @@ class FakeRead:
         if argv == ["nft", "-a", "list", "ruleset"]:
             return ("ip daddr 8.8.4.4 tcp dport 8080 dnat to 10.77.0.2:8080\n"
                     "ip daddr 8.8.4.4 tcp dport 8081 dnat to 10.77.0.3:8081")
+        if argv == ["/usr/sbin/sshd", "-T"]:
+            return (
+                "passwordauthentication " + ("no" if self.ssh_hardened else "yes") + "\n"
+                "kbdinteractiveauthentication no\n"
+                "pubkeyauthentication yes\n"
+                "permitrootlogin " + ("no" if self.ssh_hardened else "prohibit-password") + "\n"
+            )
+        if argv == ["ss", "-H", "-ltn", "sport", "=", ":22"]:
+            return "LISTEN 0 128 0.0.0.0:22\n"
         if argv == ["ss", "-H", "-ltn", "sport", "=", ":8080"]:
             return "LISTEN 0 128 0.0.0.0:8080\n" if self.port_listening else ""
         raise RuntimeError("unavailable")
@@ -125,6 +136,24 @@ class PreflightTests(unittest.TestCase):
         fake = FakeRead(routed=True)
         result = check(fake, "peer", PUB, WG, PEER, None, "local-nat", 8080)
         self.assertEqual(self.by_code(result)["nat_return_route"]["status"], "ok")
+
+    def test_peer_reports_source_route_as_attention_when_ip_unassigned(self):
+        fake = FakeRead(public_on_peer=False)
+        result = check(fake, "peer", PUB, WG, PEER, None, "routed-wg", 22)
+        findings = self.by_code(result)
+        self.assertEqual(findings["source_route"]["status"], "attention")
+        self.assertIn("absente", findings["source_route"]["message"])
+        self.assertNotIn(("ip", "-j", "-4", "route", "get", "1.1.1.1", "from", PUB),
+                         fake.calls)
+
+    def test_ssh_default_password_and_root_access_are_not_ready(self):
+        result = check(FakeRead(ssh_hardened=False), "peer", PUB, WG, PEER,
+                       None, "routed-wg", 22)
+        self.assertEqual(self.by_code(result)["ssh_default_posture"]["status"],
+                         "attention")
+        result = check(FakeRead(ssh_hardened=True), "peer", PUB, WG, PEER,
+                       None, "routed-wg", 22)
+        self.assertEqual(self.by_code(result)["ssh_default_posture"]["status"], "ok")
 
     def test_peer_requires_public_alias_and_return_route(self):
         fake = FakeRead(routed=False, public_on_peer=False)
