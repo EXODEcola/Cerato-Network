@@ -6,6 +6,38 @@
   const ROOT_ID='cerato-native-auth';
   const state={account:null, csrf:'', challenge:null, active:false};
   const endpoint='/api/auth/';
+  // Preserve an unmodified fetch for new auth endpoints. The historical UI
+  // still calls fetch() independently and needs the newly issued CSRF token.
+  const nativeFetch=window.fetch.bind(window);
+  function legacyFetch(input,init){
+    // Reject malformed input rather than redirecting an authenticated request.
+    let url,method;
+    try{
+      url=new URL(input instanceof Request?input.url:String(input),location.href);
+      method=String((init&&init.method)||(input instanceof Request?input.method:'GET')).toUpperCase();
+    }catch(err){return Promise.reject(err);}
+    if(url.origin!==location.origin || !url.pathname.startsWith('/api/') ||
+       url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/api/accounts')){
+      return nativeFetch(input,init);
+    }
+    if(method==='GET' || method==='HEAD' || method==='OPTIONS'){
+      return nativeFetch(input,init);
+    }
+    // No mutation may run on behalf of an uninitialized or expired session.
+    if(!state.account || !state.csrf || state.active){
+      return Promise.reject(Error('Connexion Cerato requise avant toute modification.'));
+    }
+    // The legacy client may send its obsolete CSRF token. Never forward it.
+    const headers=new Headers(input instanceof Request?input.headers:undefined);
+    if(init&&init.headers)new Headers(init.headers).forEach((v,k)=>headers.set(k,v));
+    headers.set('X-Cerato-CSRF',state.csrf);
+    const options=Object.assign({},init||{},{
+      headers,credentials:'same-origin',redirect:'error',cache:'no-store'
+    });
+    return nativeFetch(input,options);
+  }
+  // This adapter owns no permissions: server-side RBAC and CSRF still decide.
+  window.fetch=legacyFetch;
   const label={owner:'Propriétaire',admin:'Administrateur',user:'Lecture seule'};
   function element(tag,className,text) {
     const el=document.createElement(tag);
@@ -32,7 +64,7 @@
     const headers={'Accept':'application/json'};
     if(body !== undefined)headers['Content-Type']='application/json';
     if(method !== 'GET' && state.csrf)headers['X-Cerato-CSRF']=state.csrf;
-    const response=await fetch(path,{method,headers,credentials:'same-origin',
+    const response=await nativeFetch(path,{method,headers,credentials:'same-origin',
       body:body===undefined?undefined:JSON.stringify(body),
       cache:'no-store',redirect:'error'});
     const data=await response.json().catch(()=>({}));
