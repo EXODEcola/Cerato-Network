@@ -78,7 +78,7 @@ class DevChannelTests(unittest.TestCase):
         self.assertIn('cron: "28 4 * * 0,3"', workflow)
         self.assertIn("cerato-network-signing", workflow)
         self.assertIn("TRUSTED_PUBLIC_SHA256", workflow)
-        self.assertIn("RELEASE_VERSION", workflow.upper() + " RELEASE_VERSION")
+        self.assertIn("REQUEST_VERSION", workflow)
         self.assertIn('== *-dev.*', workflow)
         self.assertIn("--prerelease", workflow)
 
