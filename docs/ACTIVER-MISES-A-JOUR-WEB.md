@@ -90,3 +90,22 @@ connexion avant tests HTTP de bout en bout et rollback validé.
 Le Dell R530 (`10.77.0.2`), l'Additional IPv4
 `54.37.165.151`, WireGuard, NAT, règles de pare-feu et
 configurations d'accès réseau sont hors du périmètre de l'activation.
+
+## Recherche périodique, sans installation automatique
+
+Après l'activation validée de la source de confiance, le script
+`integrations/activate_live_updates.py --install` installe aussi
+`cerato-network-update-check.timer`. Toutes les six heures environ,
+le service appelle **uniquement** `cerato-updatectl check`.
+Il vérifie la signature et télécharge les nouvelles releases compatibles
+dans le cache privé pour affichage dans l'onglet Mises à jour.
+
+Le timer **ne déclenche jamais** `apply`, aucun installateur,
+aucune modification de WireGuard, d'IP ou de NAT. La décision d'installer
+reste exclusivement dans le panneau administrateur.
+
+Si la clé publique n'a pas été approuvée et épinglée, le timer ne
+s'installe pas. Une simple réponse HTTP 200 ne prouve pas qu'une
+release est signée : le moteur valide toujours son manifeste et l'index
+de canal. L'absence d'index publié (HTTP 404) est désormais indiquée
+comme `channel_not_published`, et non comme une signature invalide.
