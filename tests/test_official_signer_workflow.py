@@ -30,7 +30,8 @@ class OfficialSignerWorkflowTests(unittest.TestCase):
         self.assertIn("schedule:",src)
         self.assertNotIn("pull_request:",src)
         self.assertNotIn("push:\n",src)
-        self.assertIn("--prerelease --latest=false",src)
+        self.assertIn('options+=(--prerelease)',src)
+        self.assertIn('--latest=false',src)
         self.assertIn("gh release upload",src)
 
 if __name__=="__main__":

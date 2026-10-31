@@ -65,6 +65,11 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
             [[ "$REQUEST_FROM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
+            if [[ "$REQUEST_CHANNEL" == "beta" ]]; then
+              [[ "$REQUEST_VERSION" == *-beta.* ]]
+            else
+              [[ "$REQUEST_VERSION" != *-* ]]
+            fi
           fi
       - name: Tests complets AVANT signature
         shell: bash
@@ -143,14 +148,15 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
             gh release upload "$VERSION" "$OUT/channels/$CHANNEL.json" "$OUT/channels/$CHANNEL.sig" --clobber
           else
+            options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION"
+                     --notes "Release Graphite CSS signee Ed25519. Aucun backend ni JavaScript remplace."
+                     --latest=false)
+            if [[ "$CHANNEL" == "beta" ]]; then options+=(--prerelease); fi
             gh release create "$VERSION" \
               "$OUT/release/manifest.json" "$OUT/release/manifest.sig" \
               "$OUT/release/cerato-network-release.zip" \
               "$OUT/channels/$CHANNEL.json" "$OUT/channels/$CHANNEL.sig" \
               "$RUNNER_TEMP/cerato-trust/release-verification.pub" \
-              --target "$GITHUB_SHA" --title "Cerato Network $VERSION" \
-              --notes "Release Graphite CSS signee Ed25519. Aucun backend ni JavaScript remplace." \
-              --latest=false \
-              $( [[ "$CHANNEL" == "beta" ]] && printf '%s' '--prerelease' )
+              "${options[@]}"
           fi
           echo "Release GitHub publiee, OVH non modifie."
