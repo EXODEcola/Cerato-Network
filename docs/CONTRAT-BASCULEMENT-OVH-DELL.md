@@ -189,3 +189,46 @@ le premier inventaire a manqué une sous-chaîne de filtrage.
 Un DROP *atteignable structurellement* reste seulement un
 risque : il faut ensuite une trace SYN/SYN-ACK pendant
 un essai limité avec les rollbacks.
+
+## Preuve 8080 WAN et diagnostic direct du noyau (31 octobre)
+
+Nouvelle capture sur `enp1s0f0` en mode NAT restauré :
+la machine Windows (`82.67.7.118`) envoie des SYN vers
+`54.37.165.151:22` **et** `54.37.165.151:8080`, visibles
+sur OVH. Les essais SSH et HTTP du PC expirent. **La réception
+WAN de ces deux ports est donc prouvée** ; aucun filtrage amont
+général n'explique les timeouts.
+
+L'absence de réponse SSH/22 est cohérente avec la politique
+historique (seul 8080 est publié). Pour 8080, la panne est
+à rechercher entre DNAT, FORWARD, WG et le retour Dell.
+L'ancienne capture WG ne coïncidait pas formellement avec ce
+test WAN, il serait abusif de prétendre qu'elle prouve un DROP
+de paquets dans OVH.
+
+Le nouvel outil `scripts/inspect_live_nat_8080.py` interroge
+en **lecture seule** le ruleset JSON chargé par le noyau,
+pour vérifier une règle DNAT TCP 8080 vers `10.77.0.2:8080`,
+la présence des hooks PREROUTING/FORWARD, l'ordre des règles
+FORWARD, le forwarding IPv4 actif, la présence de l'alias WAN
+et la route vers le Dell via WireGuard. Il n'expose aucune clé
+ni les conditions détaillées des règles.
+
+Depuis OVH :
+
+```bash
+cd ~/Cerato-Network
+git fetch origin feature/public-ip-path-preflight
+git show FETCH_HEAD:scripts/inspect_live_nat_8080.py > /tmp/cerato-live-nat-8080.py
+sudo python3 /tmp/cerato-live-nat-8080.py
+```
+
+À compléter, **sans rebasculer l'IP**, par une capture simultanée
+WAN/WG pendant un seul test Windows `curl.exe` sur 8080,
+en vérifiant les paquets `82.67.7.118 -> 54.37.165.151:8080`
+sur WAN et `82.67.7.118 -> 10.77.0.2:8080` sur OVH WG.
+
+Si le DNAT est absent dans le ruleset, corriger sa génération
+et sa persistance **avant** de retenter le mode routé. Si DNAT
+existe mais pas de paquets WG, regarder hooks FORWARD/rp_filter.
+Si WG transmet, vérifier le Dell et sa politique de retour.
