@@ -157,3 +157,35 @@ et ne doivent jamais supprimer les règles DROP existantes.
 
 Ne pas inférer « problème OVH », « problème Dell » ou « problème
 pare-feu » tant que la trace synchronisée n'indique pas la rupture.
+
+## Chaînes secondaires : limite de l'inventaire initial et correctif
+
+Le Dell a déclaré une base chain `ip filter INPUT` avec **une
+règle mais aucun verdict direct**. Cette règle peut être un
+compteur, mais peut aussi être un `jump`/`goto` vers une chaîne
+secondaire capable de rejeter les paquets. Le premier audit
+`inspect_nft_forwarding_path.py` n'analysait que les verdicts
+situés directement dans la base chain, donc `drop_rules=0`
+**n'exclut pas** un DROP indirect.
+
+Le second outil `scripts/inspect_nft_chain_jumps.py` parcourt
+récursivement les renvois vers les chaînes du même tableau,
+signale les cibles non résolues et les verdicts dynamiques.
+Il ne montre aucune condition de règle ni IP privée.
+
+Sur **le Dell uniquement** :
+
+```bash
+cd ~/Cerato-Network-preflight
+git fetch origin feature/public-ip-path-preflight
+git show FETCH_HEAD:scripts/inspect_nft_chain_jumps.py \
+  > /tmp/cerato-nft-branches.py
+sudo python3 /tmp/cerato-nft-branches.py --role peer
+```
+
+Les champs `reachable_drop_rules`, `unresolved_targets`,
+`dynamic_verdicts_possible` permettront de vérifier si
+le premier inventaire a manqué une sous-chaîne de filtrage.
+Un DROP *atteignable structurellement* reste seulement un
+risque : il faut ensuite une trace SYN/SYN-ACK pendant
+un essai limité avec les rollbacks.
