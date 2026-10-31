@@ -135,6 +135,8 @@ def _pure_adapter(stage):
     import types
     names=("routed_firewall","routed_nft_inject","cerato_routed_support")
     before={key:sys.modules.get(key) for key in names}
+    old_bytecode=sys.dont_write_bytecode
+    sys.dont_write_bytecode=True
     try:
         for name in names:
             spec=importlib.util.spec_from_file_location(name,stage/(name+".py"))
@@ -146,6 +148,7 @@ def _pure_adapter(stage):
         helper=sys.modules["cerato_routed_support"]
         return helper.routed_render_nft
     finally:
+        sys.dont_write_bytecode=old_bytecode
         for name,prev in before.items():
             if prev is None:
                 sys.modules.pop(name,None)
@@ -237,7 +240,7 @@ def simulate(stage, ip, vpn_ip,management,*,controller=CONTROLLER,
         "virtual_forward_outbound":True,
         "virtual_gateway_input_drop_preserved":True,
         "virtual_other_nat_mappings_preserved":len(future["mappings"]),
-        "no_files_modified":True,
+        "configuration_files_modified":False,
         "network_modified":False,
         "ready_to_install":False,
         "ready_for_routed_ip":False,
