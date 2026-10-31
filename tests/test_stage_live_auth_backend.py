@@ -29,7 +29,8 @@ class PrivateAuthStagingTests(unittest.TestCase):
     def test_stages_private_modules_but_changes_no_live_files(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
-            live=root/"live-server.py"
+            live=root/"live"/"backend"/"server.py"
+            live.parent.mkdir(parents=True)
             live.write_text(SOURCE,encoding="utf8")
             before=live.read_bytes()
             base=root/"baseline.json"
@@ -58,7 +59,8 @@ class PrivateAuthStagingTests(unittest.TestCase):
     def test_unknown_hash_blocks_before_write(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
-            live=root/"server.py"
+            live=root/"live"/"backend"/"server.py"
+            live.parent.mkdir(parents=True)
             live.write_text(SOURCE,encoding="utf8")
             base=root/"baseline.json"
             base.write_text(json.dumps({"server_sha256":"0"*64}))
