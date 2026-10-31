@@ -278,3 +278,43 @@ est le **second** champ de l'en-tête Ethernet
 **Aucune modification de MAC, d'alias WAN, de tunnel ou de
 pare-feu pendant ce test.** Ne pas rebasculer le Dell tant que
 la réception L2 du paquet par le noyau OVH n'est pas réparée.
+
+## Diagnostic L2 confirmé par capture — MAC de destination différente (31 octobre 2026)
+
+Le RISE-1 rapporte pour `enp1s0f0` une adresse Ethernet physique
+`a8:a1:59:41:10:46`. Avec `tcpdump -e`, les SYN Internet
+vers `54.37.165.151:8080` apparaissent à répétition avec
+**destination MAC `02:00:00:aa:e9:ab`**.
+Les six SYN étaient précédemment visibles sur l'interface avec
+`tcpdump` mais jamais dans PREROUTING nftables (priorité -301),
+ce qui correspond à une trame capturée en promiscuous mais non
+destinée à la MAC physique de l'hôte.
+
+**Piste racine confirmée par la différence MAC L2 ; configuration
+OVHcloud encore à vérifier :** une vMAC OVH associée à cette
+Additional IPv4, vraisemblablement `02:00:00:aa:e9:ab`.
+Ce point doit être **confirmé côté OVHcloud** dans
+**Network → Adresses IP Publiques**, ligne de l'IPv4
+`54.37.165.151`, colonne « MAC virtuelle ».
+
+Action recommandée si l'adresse MAC correspond **et si aucune VM
+ne l'utilise** : utiliser les actions de cette ligne pour
+« Supprimer la MAC virtuelle » (ne jamais sélectionner « Supprimer
+l'Additional IP » ni résilier le service). La suppression d'une
+MAC virtuelle est irréversible pour cette MAC précise et toute VM
+l'utilisant peut être affectée. Référence officielle :
+https://docs.ovhcloud.com/fr/guides/bare-metal-cloud/dedicated-servers/network-virtual-mac
+
+Après désassociation OVHcloud, confirmer sur une nouvelle capture
+`tcpdump -e` que la **destination MAC** des SYN vers l'Additional
+IPv4 correspond à celle du NIC `enp1s0f0`, puis refaire le
+contrôle de réception PREROUTING/nftables. La propagation du
+changement sur le réseau OVH peut être différée : ne pas supposer
+qu'elle est instantanée.
+
+**Ne pas modifier la MAC de l'interface physique, ne pas supprimer
+l'IP de gestion `51.210.223.57`, ne pas forcer le mode promiscuous
+comme solution, et ne pas activer le routage public vers Dell avant
+cette validation L2.** L'objectif ultérieur demeure une /32
+routée via WireGuard et persistée, avec pare-feu Dell, sauvegardes
+et rollback automatique indépendant sur deux hôtes.
