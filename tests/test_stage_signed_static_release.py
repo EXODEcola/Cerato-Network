@@ -43,7 +43,8 @@ class SignedStaticStageTests(unittest.TestCase):
                         "-out",str(public)],capture_output=True,check=True)
         private.chmod(0o600)
         release=root/"approved"/"v0.1.0-beta.1"
-        release.mkdir(parents=True)
+        release.mkdir(parents=True,mode=0o700)
+        release.chmod(0o700)
         prepare(src,release,"v0.1.0-beta.1")
         sign_prepared(release,private)
         channel=root/"approved"/"channels"
