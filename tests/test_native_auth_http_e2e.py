@@ -141,6 +141,7 @@ class EndToEndLocalHTTPBridgeTests(unittest.TestCase):
 
     def test_legacy_login_rejected_and_password_requires_mfa(self):
         self.store.role="owner"
+        before=list(self.store.actions)
         code,_=self.invoke("/api/login","POST",{},origin=ORIGIN)
         self.assertEqual(code,410)
         code,payload=self.invoke("/api/auth/login","POST",
@@ -153,7 +154,7 @@ class EndToEndLocalHTTPBridgeTests(unittest.TestCase):
         self.assertEqual(code,200)
         self.assertIn("csrf",payload)
         self.assertNotIn("session",payload)
-        self.assertEqual(self.store.actions,[] if self.store.role!="owner" else self.store.actions)
+        self.assertEqual(self.store.actions,before)
 
     def test_unreviewed_routes_deny_before_legacy(self):
         self.store.role="owner"
