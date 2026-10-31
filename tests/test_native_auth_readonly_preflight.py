@@ -66,7 +66,10 @@ class NativeAuthReadOnlyPreflightTests(unittest.TestCase):
             safe=root/"safe"
             safe.mkdir(mode=0o700)
             safe.chmod(0o700)
-            self.assertFalse(preflight._auth_directory(safe)["requires_private_storage_setup"])
+            self.assertFalse(preflight._auth_directory(
+                safe,expected_uid=__import__('os').getuid())["requires_private_storage_setup"])
+            self.assertTrue(preflight._auth_directory(
+                safe,expected_uid=__import__('os').getuid()+1)["requires_private_storage_setup"])
             safe.chmod(0o755)
             self.assertEqual(preflight._auth_directory(safe)["state"],"unsafe_permissions")
             safe.chmod(0o700)
