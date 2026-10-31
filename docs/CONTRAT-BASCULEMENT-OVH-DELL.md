@@ -112,3 +112,48 @@ doit être effectué **pendant** que l'IP est routée, en sauvegardant
 les compteurs des interfaces et les paquets SYN/SYN-ACK sur les
 deux hôtes. Aucune désactivation du pare-feu public ou des
 protections de gestion ne doit être tentée sans cette preuve.
+
+## Rapport nftables réel des deux machines — 31 octobre, après restauration
+
+Le second inventaire a renvoyé les faits suivants, obtenus sur les
+deux machines sans activation réseau :
+
+- **OVH / gateway :** une seule base chain FORWARD pertinente
+  `table ip cerato_network / chain forward`, hook `forward`,
+  priorité `-30`, policy `accept`, 4 règles (2 `drop`,
+  2 `accept`). `other_base_chains_with_possible_drop=[]`.
+- **Dell / peer :** une seule base chain INPUT IPv4 pertinente
+  `table ip filter / chain INPUT`, hook `input`, priorité `0`,
+  policy `accept`, 1 règle sans verdict `drop` ni `reject`
+  détecté. `other_base_chains_with_possible_drop=[]`.
+
+L'hypothèse « autre chaîne *base* nftables bloquant l'ACCEPT Cerato »
+**n'est pas étayée par le ruleset au repos**. Le rapport ne couvre
+pas les filtres `iptables-legacy`, les programmes `tc`/`XDP`,
+les `rp_filter` noyau, ni l'évolution des règles lors d'une bascule.
+
+**Lors de l'essai précédent, aucune capture simultanée des trois
+interfaces n'a été réalisée pendant que l'IP était routée**.
+La trace WAN après rollback ne peut localiser la panne.
+
+### Contrôle ciblé pendant le prochain essai expirant
+
+Instrumenter **simultanément** :
+
+1. OVH `enp1s0f0` : SYN de l'IP cliente vers TCP/22 du /32 ;
+2. OVH `wg-cerato` : SYN transmis en clair sur le tunnel ;
+3. Dell `wg-cerato` : SYN reçu et éventuel SYN-ACK émis ;
+4. Pour le test HTTPS sortant depuis le Dell : progression de la
+   connexion sur Dell WG, OVH WG et OVH WAN.
+
+L'outil de capture (lecture seule) peut être `tcpdump -nn` avec
+filtre `host 54.37.165.151 and tcp and (port 22 or port 443)`,
+placé **avant** l'activation temporaire, puis arrêté après les
+deux tests. Ne jamais couper les sessions Tailscale et SSH de
+gestion. Le rollback OVH doit être armé, validé et expirer
+**avant** celui du Dell. Les règles spécifiques FORWARD sur
+OVH doivent avoir un `counter` pour confirmer les paquets traités,
+et ne doivent jamais supprimer les règles DROP existantes.
+
+Ne pas inférer « problème OVH », « problème Dell » ou « problème
+pare-feu » tant que la trace synchronisée n'indique pas la rupture.
