@@ -37,7 +37,10 @@ def _cerato_secure_handler(cls):
     if not origin.startswith("https://"):
         raise RuntimeError("Origine HTTPS de confiance absente")
     store = _CeratoAuthStore(_CeratoPath("/var/lib/cerato-network-auth/accounts.sqlite3"))
-    return _cerato_wrap(cls, store, allowed_origin=origin)
+    # Never expose the old handler or its serializers to a read-only user.
+    # Only the reviewed netstate() snapshot is sent through viewer_projection.
+    return _cerato_wrap(cls, store, allowed_origin=origin,
+                        viewer_status_provider=lambda: netstate())
 
 """
 

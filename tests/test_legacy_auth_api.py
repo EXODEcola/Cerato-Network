@@ -157,6 +157,29 @@ class LegacyAuthAPITests(unittest.TestCase):
         self.assertEqual(self.call('POST', '/api/accounts', body={'role': 'admin'},
                          session='valid-session', csrf='valid-csrf').code, 403)
 
+    def test_mutation_payloads_are_explicitly_allowlisted(self):
+        for extra in (
+            {'email': 'u@example.net', 'password': 'valid-password-123',
+             'role': 'user', 'owner': True},
+            {'email': 'u@example.net', 'password': 'valid-password-123',
+             'role': 'user', 'network_admin': True},
+        ):
+            response=self.call('POST','/api/accounts',body=extra,
+                               session='valid-session',csrf='valid-csrf')
+            self.assertEqual(response.code,403)
+        result=self.call('PATCH','/api/accounts/23',
+                         body={'active':False,'owner':True},
+                         session='valid-session',csrf='valid-csrf')
+        self.assertEqual(result.code,403)
+        self.assertEqual(self.call('PATCH','/api/accounts/23',body={},
+                                  session='valid-session',csrf='valid-csrf').code,403)
+        self.assertEqual(self.call('PATCH','/api/auth/me',
+                                  body={'current_password':'pw','role':'owner'},
+                                  session='valid-session',csrf='valid-csrf').code,403)
+        self.assertEqual(self.call('PATCH','/api/accounts/23',
+                                  body={'reset_mfa':True},
+                                  session='valid-session',csrf='valid-csrf').code,200)
+
     def test_admin_can_manage_others_not_owner(self):
         self.store.role = 'admin'
         def request(verb, target):

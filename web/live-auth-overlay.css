@@ -114,6 +114,27 @@
   padding: 10px 0;border-bottom: 1px solid #333f43;
   overflow-wrap: anywhere;
 }
+#cerato-native-auth .cerato-account-status {
+  font: 650 10px Inter, "Segoe UI", system-ui, sans-serif;
+  color: #a9ccb9;
+  border: 1px solid #456f5c;
+  border-radius: 5px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+#cerato-native-auth .cerato-account-row-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+#cerato-native-auth .cerato-account-row-actions button {
+  font-size: 11px;
+  min-height: 32px;
+}
+#cerato-native-auth .cerato-auth-dialog > .cerato-auth-button:not(.primary) {
+  margin-top: 7px;
+}
 .cerato-account-actions {display: flex;align-items: center;gap: 8px;flex-wrap: wrap}
 .cerato-account-actions button:hover,
 #cerato-native-auth .cerato-auth-button:hover:not(:disabled) {background:#384943}

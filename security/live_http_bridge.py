@@ -76,11 +76,14 @@ class LiveHTTPBridge:
     before removing HTTP Basic. Not a drop-in production installer.
     """
 
-    def __init__(self, store, *, allowed_origin: str):
+    def __init__(self, store, *, allowed_origin: str, viewer_status_provider=None):
         self.store = store
         self.api = LegacyAuthAPI(store, allowed_origin=allowed_origin)
         self.origin = allowed_origin.rstrip("/")
         self.hostname = urlsplit(self.origin).netloc.lower()
+        # Explicit trusted data provider: a viewer NEVER reaches legacy
+        # serialization functions that may bypass send_json() entirely.
+        self.viewer_status_provider = viewer_status_provider
 
     def dispatch(self, handler, method: str, legacy_method):
         method = method.upper()
@@ -119,32 +122,35 @@ class LiveHTTPBridge:
             actor = authorize_legacy_request(self.store, token, method, path, csrf)
         except (AuthError, ValueError, TypeError):
             return _reply(handler, 403, {"error": "Session ou autorisation refusée."})
-        # Existing internal check_session() still expects the obsolete password.
-        # A request-local bypass is safe ONLY after the new session/RBAC/CSRF gate.
-        # Never override global process state or other handler instances.
+        # A viewer never executes any historical route or serializer:
+        # legacy code could call send_error(), _json() or write() directly,
+        # bypassing a simple send_json() projection wrapper.
+        if actor["role"] == "user":
+            if method != "GET" or path != "/api/status" or not callable(self.viewer_status_provider):
+                return _reply(handler, 403, {"error": "Projection en lecture seule indisponible."})
+            try:
+                safe = project_legacy_status(actor, self.viewer_status_provider())
+            except (AuthError, ValueError, TypeError, KeyError):
+                return _reply(handler, 503, {"error": "État de consultation indisponible."})
+            return _reply(handler, 200, safe)
+        # Owners and administrators have passed session, RBAC and CSRF.
+        # The old check_session() still expects an obsolete password, so
+        # bypass it for THIS request only (not globally).
         previous = getattr(handler, "check_session", None)
         if not callable(previous):
             raise LiveBridgeError("Legacy session hook missing")
         handler.check_session = lambda *args, **kwargs: True
-        prior_send = getattr(handler, "send_json", None)
         try:
-            if actor["role"] == "user":
-                if method != "GET" or path != "/api/status" or not callable(prior_send):
-                    raise LiveBridgeError("Projection en lecture seule non sûre")
-                def projected(status, payload, *args, **kwargs):
-                    safe = project_legacy_status(actor, payload)
-                    return prior_send(status, safe, *args, **kwargs)
-                handler.send_json = projected
             return legacy_method()
         finally:
             handler.check_session = previous
-            if actor["role"] == "user":
-                handler.send_json = prior_send
 
 
-def wrap_legacy_handler(handler_class, store, *, allowed_origin: str):
+def wrap_legacy_handler(handler_class, store, *, allowed_origin: str,
+                        viewer_status_provider=None):
     """Modify only a class passed explicitly by a controlled staging harness."""
-    bridge = LiveHTTPBridge(store, allowed_origin=allowed_origin)
+    bridge = LiveHTTPBridge(store, allowed_origin=allowed_origin,
+                            viewer_status_provider=viewer_status_provider)
     if getattr(handler_class, "_cerato_live_bridge_installed", False):
         raise LiveBridgeError("Bridge already installed")
     if not callable(getattr(handler_class, "check_session", None)):
@@ -158,7 +164,13 @@ def wrap_legacy_handler(handler_class, store, *, allowed_origin: str):
         name = "do_" + verb
         old = getattr(handler_class, name, None)
         if old is None:
-            continue
+            # The real OVH legacy handler implements only GET/POST. Native
+            # account/profile mutations require PATCH/DELETE, so provide
+            # these verbs without forwarding them to any legacy operation.
+            # All non-account routes still fail closed in dispatch().
+            def unavailable(self):
+                return _reply(self, 405, {"error": "Méthode historique interdite."})
+            old = unavailable
         def gated(self, _method=old, _verb=verb):
             return bridge.dispatch(self, _verb, lambda: _method(self))
         setattr(handler_class, name, gated)

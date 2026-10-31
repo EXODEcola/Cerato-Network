@@ -106,7 +106,12 @@ class Handler:
 class LiveHTTPBridgeTests(unittest.TestCase):
     def setUp(self):
         self.store=Store()
-        self.bridge=LiveHTTPBridge(self.store,allowed_origin="https://panel.example.net")
+        self.bridge=LiveHTTPBridge(self.store,allowed_origin="https://panel.example.net",
+            viewer_status_provider=lambda: {
+                "tunnel_active": True,"dashboard_mode":"real","timestamp":12345,
+                "peers":{"dell-r530":{"last_handshake":12345}},
+                "private_key":"must-not-leak","ip":"54.37.165.151"
+            })
 
     @staticmethod
     def cookie():
@@ -131,11 +136,21 @@ class LiveHTTPBridgeTests(unittest.TestCase):
         request=Handler("/api/status",cookie=self.cookie())
         self.dispatch(request)
         self.assertEqual(request.status,200)
-        self.assertTrue(request.saved["tunnel_active"])
-        self.assertNotIn("private_key",request.saved)
-        self.assertNotIn("peers",request.saved)
-        self.assertNotIn("ip",request.saved)
-        self.assertEqual(request.calls,[("legacy-GET","/api/status")])
+        import json
+        payload=json.loads(request.wfile.getvalue())
+        self.assertTrue(payload["tunnel_active"])
+        self.assertNotIn("private_key",payload)
+        self.assertNotIn("peers",payload)
+        self.assertNotIn("ip",payload)
+        self.assertEqual(request.calls,[])
+
+    def test_viewer_without_trusted_provider_fails_closed(self):
+        self.store.role="user"
+        secure=LiveHTTPBridge(self.store,allowed_origin="https://panel.example.net")
+        request=Handler("/api/status",cookie=self.cookie())
+        secure.dispatch(request,"GET",request.do_GET)
+        self.assertEqual(request.status,403)
+        self.assertEqual(request.calls,[])
 
     def test_user_mutations_denied_before_legacy_calls(self):
         self.store.role="user"

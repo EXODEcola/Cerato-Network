@@ -86,6 +86,8 @@ class LegacyAuthAPI:
             if (method, path) == ('GET', '/api/auth/me'):
                 return AuthReply(200, {'account': actor, 'csrf': self.store.rotate_csrf(session)})
             if (method, path) == ('PATCH', '/api/auth/me'):
+                if not data or set(data) - {'current_password', 'email', 'new_password'}:
+                    raise Forbidden('Champs de profil non autorisés')
                 account = self.store.change_own_identity(
                     actor, data.get('current_password'),
                     email=data.get('email'), new_password=data.get('new_password'))
@@ -97,13 +99,17 @@ class LegacyAuthAPI:
             if (method, path) == ('GET', '/api/accounts'):
                 return AuthReply(200, {'accounts': self.store.list_accounts(actor)})
             if (method, path) == ('POST', '/api/accounts'):
+                if set(data) != {'email', 'password', 'role'}:
+                    raise Forbidden('Champs de création invalides')
                 account = self.store.create_account(
                     actor, data.get('email'), data.get('password'), data.get('role'))
                 return AuthReply(201, {'account': account})
             match = _ACCOUNT_PATH.fullmatch(path)
             if match and method == 'PATCH':
-                fields = {key: data[key] for key in
-                          ('email', 'role', 'active', 'new_password', 'reset_mfa') if key in data}
+                allowed = {'email', 'role', 'active', 'new_password', 'reset_mfa'}
+                if not data or set(data) - allowed:
+                    raise Forbidden('Champs de gestion invalides')
+                fields = {key: data[key] for key in allowed if key in data}
                 account = self.store.manage_account(actor, int(match.group(1)), **fields)
                 return AuthReply(200, {'account': account})
             if match and method == 'DELETE':
