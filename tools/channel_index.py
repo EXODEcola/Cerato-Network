@@ -20,7 +20,7 @@ from build_release import (PackageError, canonical_json, sign, verify,
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"updates"))
 from remote import _parse_version, DistributionError
 
-CHANNELS={"stable","beta"}
+CHANNELS={"stable","beta","dev"}
 
 
 def create_channel(release_dir: Path, channel: str, output: Path,
@@ -37,7 +37,9 @@ def create_channel(release_dir: Path, channel: str, output: Path,
     verified=verify(release_dir,Path(public_key))
     version=verified["version"]
     if channel=="stable" and "-" in version:
-        raise PackageError("Impossible de publier une beta sur stable")
+        raise PackageError("Impossible de publier une prerelease sur stable")
+    if channel=="dev" and "-dev." not in version:
+        raise PackageError("Le canal dev exige une version -dev.N")
     source=(release_dir/"manifest.json").read_bytes()
     now=int(time.time()) if issued_at is None else int(issued_at)
     if now<0:
