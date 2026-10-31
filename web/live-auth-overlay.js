@@ -67,6 +67,9 @@
       catch(e){errorMessage(b.closest('.cerato-auth-dialog'),e);}
       finally{b.disabled=false;}
     },'primary');
+    form.forEach(field=>field.input.addEventListener('keydown',event=>{
+      if(event.key==='Enter'){event.preventDefault();b.click();}
+    }));
     return b;
   }
   function firstLogin(initialized) {
