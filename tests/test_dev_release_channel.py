@@ -54,6 +54,23 @@ class DevChannelTests(unittest.TestCase):
                 _channel_index("https://example.org/releases", "dev",
                                Path("/not-used.pub"), now=300)
 
+    def test_beta_channel_rejects_dev_index_even_if_signature_is_valid(self):
+        from build_release import canonical_json
+        pointer = {
+            "schema": 1, "product": "cerato-network", "channel": "beta",
+            "version": "v0.1.1-dev.2", "manifest_sha256": "a" * 64,
+            "issued_at": 200, "expires_at": 1000,
+        }
+        raw = canonical_json(pointer)
+        def fake_get(url, limit, transport=None):
+            return raw if url.endswith(".json") else b"signature"
+        with patch("remote._get", side_effect=fake_get), patch(
+            "remote.verify_signature", return_value=None
+        ):
+            with self.assertRaises(DistributionError):
+                _channel_index("https://example.org/releases", "beta",
+                               Path("/not-used.pub"), now=300)
+
     def test_dev_signed_index_can_pass_channel_gate(self):
         from build_release import canonical_json
         pointer = {
