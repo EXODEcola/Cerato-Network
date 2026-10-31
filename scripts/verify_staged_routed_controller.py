@@ -32,11 +32,11 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def _private_file(path,*,max_bytes=200_000):
+def _private_file(path,*,max_bytes=200_000,trusted_uid=0):
     if path.is_symlink() or not path.is_file():
         raise VerificationError("Fichier absent ou lien symbolique interdit")
     st=path.stat()
-    if st.st_uid!=0 or (st.st_mode & 0o077):
+    if st.st_uid!=trusted_uid or (st.st_mode & 0o077):
         raise VerificationError("Fichier non privé ou propriétaire non root")
     if not 0<st.st_size<=max_bytes:
         raise VerificationError("Taille de fichier incorrecte")
@@ -49,14 +49,14 @@ def _call_count(node,name):
 
 
 def inspect_staged(stage_dir, original=SOURCE, support_dir=None,
-                   expected_patched_sha=None):
+                   expected_patched_sha=None,trusted_uid=0):
     stage_dir=Path(stage_dir)
     if not stage_dir.is_absolute() or not str(stage_dir).startswith("/tmp/"):
         raise VerificationError("Le staging doit rester dans /tmp")
     if stage_dir.is_symlink() or not stage_dir.is_dir():
         raise VerificationError("Dossier staging inexistant ou symbolique")
     st=stage_dir.stat()
-    if st.st_uid!=0 or (st.st_mode & 0o077):
+    if st.st_uid!=trusted_uid or (st.st_mode & 0o077):
         raise VerificationError("Dossier staging non privé")
     if set(p.name for p in stage_dir.iterdir())!=STAGED:
         raise VerificationError("Fichiers staging manquants ou inattendus")
@@ -67,7 +67,7 @@ def inspect_staged(stage_dir, original=SOURCE, support_dir=None,
     original_raw=original.read_bytes()
     if sha256(original_raw)!=SOURCE_SHA:
         raise VerificationError("Le contrôleur live a changé depuis le staging")
-    patched_raw=_private_file(stage_dir/"ceratoctl")
+    patched_raw=_private_file(stage_dir/"ceratoctl",trusted_uid=trusted_uid)
     staged_sha=sha256(patched_raw)
     if expected_patched_sha is not None and staged_sha!=expected_patched_sha:
         raise VerificationError("Empreinte staging différente du résultat approuvé")
@@ -98,7 +98,7 @@ def inspect_staged(stage_dir, original=SOURCE, support_dir=None,
         raise VerificationError("Import des modules de compatibilité invalide")
     support_checks={}
     for dest,src in ORIGIN.items():
-        raw=_private_file(stage_dir/dest)
+        raw=_private_file(stage_dir/dest,trusted_uid=trusted_uid)
         try:
             ast.parse(raw.decode("utf-8"))
             compile(raw,dest,"exec")
