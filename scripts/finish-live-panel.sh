@@ -16,6 +16,26 @@ SERVICE=cerato-network-web.service
 UPDATE_SERVICE=cerato-network-update.service
 BACKUP_ROOT=/var/backups/cerato-network-inplace/graphite-bootstrap
 
+# The HTTP process may start later than systemctl reports active.
+# Keep probes local and never print the sensitive web response.
+wait_for_panel(){
+  local count
+  for ((count=1;count<=30;count++)); do
+    if systemctl is-active --quiet "$SERVICE" &&
+       curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:8787/; then
+      echo "Port 8787 disponible après $count contrôle(s)."
+      return 0
+    fi
+    if systemctl is-failed --quiet "$SERVICE"; then
+      echo "Service Web en échec pendant le démarrage." >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "Le panneau n'a pas répondu sur 127.0.0.1:8787 après 30 contrôles." >&2
+  return 1
+}
+
 for rel in backend/server.py web/app.js web/style.css; do
   [[ -f "$LIVE/$rel" && ! -L "$LIVE/$rel" ]] || {
     echo "Panneau existant absent ou lien symbolique : $rel" >&2; exit 2;
@@ -45,7 +65,7 @@ if systemctl -q is-active "$UPDATE_SERVICE"; then
   echo "Installation de release en cours : opération refusée." >&2; exit 2;
 fi
 curl -fsS --max-time 6 -o /dev/null http://127.0.0.1:8787/ || {
-  echo "Le panneau existant ne répond pas sur 8787." >&2; exit 2;
+  echo "Le panneau existant ne répond pas sur 8787 avant modification." >&2; exit 2;
 }
 for rel in backend/server.py web/app.js web/style.css; do
   [[ "$(stat -c '%u' "$LIVE/$rel")" == 0 ]] || {
@@ -107,7 +127,15 @@ rollback(){
     for rel in updates/live_controller.py updates/remote.py tools/build_release.py; do
       cp -p "$BACKUP/updater/$rel" "$ENGINE/$rel" || true
     done
-    systemctl restart "$SERVICE" || true
+    if ! systemctl restart "$SERVICE"; then
+      echo "AVERTISSEMENT : le redémarrage après restauration a échoué." >&2
+    fi
+    if ! wait_for_panel; then
+      echo "La restauration des fichiers est terminée mais la disponibilité HTTP reste à vérifier via la console OVH." >&2
+      systemctl show "$SERVICE" -p ActiveState -p SubState -p Result -p ExecMainStatus --no-pager >&2 || true
+    else
+      echo "Ancienne interface restaurée et HTTP 8787 à nouveau disponible." >&2
+    fi
   fi
   exit "$code"
 }
@@ -120,8 +148,11 @@ install -o root -g root -m 0755 "$REPO/updates/live_controller.py" "$ENGINE/upda
 install -o root -g root -m 0644 "$REPO/updates/remote.py" "$ENGINE/updates/remote.py"
 install -o root -g root -m 0644 "$REPO/tools/build_release.py" "$ENGINE/tools/build_release.py"
 systemctl restart "$SERVICE"
-systemctl is-active --quiet "$SERVICE"
-curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8787/
+if ! wait_for_panel; then
+  echo "Échec du contrôle après déploiement ; état systemd (sans secrets) :" >&2
+  systemctl show "$SERVICE" -p ActiveState -p SubState -p Result -p ExecMainStatus --no-pager >&2 || true
+  false
+fi
 node --check "$LIVE/web/app.js"
 python3 -m py_compile "$LIVE/backend/server.py"
 [[ "$(config_hashes)" == "$NETWORK_BEFORE" ]] || {
