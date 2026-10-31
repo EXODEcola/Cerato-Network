@@ -96,6 +96,35 @@ exception systemd de **seul** répertoire
 le dépôt et ne doit pas être appliqué avant la migration contrôlée.
 La création du dossier ne signifie pas que les comptes sont activés.
 
+## Dernières corrections et répétition privée
+
+Le backend RISE-1 actuel définit `do_GET` et `do_POST`, **pas**
+`do_PATCH` ni `do_DELETE`. Le pont HTTP génère désormais ces deux
+méthodes supplémentaires **dans sa copie privée**, pour les seules
+routes de l'API native authentifiée. Tout chemin réseau historique
+ou méthode non explicitement autorisée continue d'être refusé. Les tests
+HTTP réels en localhost couvrent :
+- `PATCH /api/auth/me` avec réauthentification et CSRF ;
+- `PATCH /api/accounts/{id}` pour les modifications de rôle ;
+- `DELETE /api/accounts/{id}` pour les comptes secondaires ;
+- refus des variantes PATCH/DELETE sur NAT, firewall, etc. ;
+- refus sans session, sans CSRF, avec origine hostile ou en rôle User.
+
+`integrations/rehearse_native_auth.py` prépare et compile les candidats
+backend/frontend exclusivement dans un répertoire temporaire privé,
+supprimé automatiquement. Le script n'**importe ni n'exécute** le serveur
+historique ; il ne crée aucun socket ni ne teste les véritables commandes
+WireGuard et NAT.
+
+Il refuse un hash backend/frontend ne correspondant pas à une baseline
+réellement approuvée. Le rapport OVH du 31/10 signale précisément que
+la baseline initiale est **périmée**. **Ne pas la mettre à jour en
+copiant automatiquement les empreintes observées :** ce serait supprimer
+le contrôle d'approbation, et non vérifier la migration.
+
+Cette répétition valide la syntaxe et la structure privées, pas la
+capacité d'activer l'authentification sur le RISE-1 ni un rollback réel.
+
 ## Validations avant bascule
 
 1. Vérifier la **vraie structure** de l'actuel `server.py` et ses
