@@ -1,17 +1,19 @@
 name: Cerato Network - Tests de developpement
 
+# Un seul contrôle par PR et des validations finales après fusion.
+# Les pushes de développement ne doivent pas créer une seconde exécution.
 on:
-  push:
-    branches: [feature/secure-accounts]
   pull_request:
-    branches: [main, feature/secure-accounts]
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cerato-tests-${{ github.ref }}
+  group: cerato-tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,3 +47,33 @@ jobs:
           bash -n scripts/enable-live-updates.sh
           bash -n scripts/prepare-same-host-releases.sh
           bash -n scripts/init-release-signer.sh
+
+  build-handoff:
+    name: Préparer les sources approuvées pour Cerato Build
+    needs: [security-and-compatibility]
+    if: ${{ needs.security-and-compatibility.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout du commit validé
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Préparer l'entrée de compilation sans secrets
+        run: |
+          mkdir -p build-handoff
+          git archive --format=tar --prefix=cerato-network/ HEAD | gzip -n > build-handoff/cerato-network-source.tar.gz
+          SOURCE_SHA=$(git rev-parse HEAD)
+          ARCHIVE_SHA=$(sha256sum build-handoff/cerato-network-source.tar.gz | cut -d' ' -f1)
+          printf '{"commit":"%s","archive_sha256":"%s","kind":"source-handoff","signed":false,"installable":false}\n' "$SOURCE_SHA" "$ARCHIVE_SHA" > build-handoff/handoff.json
+          python3 -m json.tool build-handoff/handoff.json >/dev/null
+          test "$(stat -c %s build-handoff/cerato-network-source.tar.gz)" -gt 100
+      - name: Conserver l'entrée de build validée
+        uses: actions/upload-artifact@v4
+        with:
+          name: cerato-network-build-input-${{ github.run_id }}
+          path: build-handoff/
+          if-no-files-found: error
+          retention-days: 7
