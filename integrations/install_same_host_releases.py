@@ -124,7 +124,7 @@ def _eligible(source):
     return found
 
 
-def discover(candidates=None):
+def discover(candidates=None, *, trusted_root=Path('/etc/nginx')):
     if candidates is None:
         candidates=[]
         for location in SCOPES:
@@ -155,7 +155,7 @@ def discover(candidates=None):
     if MARKER in text or "/cerato-releases/" in text[start:end]:
         raise ProvisionError("Emplacement de distribution déjà présent, "
                              "configuration inchangée.")
-    if real.is_symlink() or not str(real).startswith("/etc/nginx/"):
+    if real.is_symlink() or trusted_root.resolve() not in real.parents:
         raise ProvisionError("Fichier de configuration non approuvé")
     return real,text,end-1
 
@@ -164,13 +164,13 @@ def generate(text,closing):
     return text[:closing] + "    # Public signed files only; no change to /api or HTTP Basic elsewhere.\n    " + MARKER + "\n" + text[closing:]
 
 
-def preflight(*,candidates=None,verify_tls=True):
+def preflight(*,candidates=None,verify_tls=True,trusted_root=Path('/etc/nginx')):
     _run("nginx","-t")
     if verify_tls:
         tls=check_tls()
     else:
         tls={"trusted_ip_certificate":False}
-    file,original,index=discover(candidates)
+    file,original,index=discover(candidates,trusted_root=trusted_root)
     snippet=SNIPPET.read_text(encoding="utf8")
     required=("location ^~ /cerato-releases/","auth_basic off;",
               "limit_except GET HEAD","root /srv/cerato-releases/public;")
