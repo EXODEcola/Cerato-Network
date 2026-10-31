@@ -49,7 +49,8 @@ BASE=Path("/var/lib/cerato-network/routed-54-37-165-151")
 BIN=Path("/usr/local/sbin/cerato-routed-cutover")
 FW_TABLE="cerato_peer_public"
 UNIT="cerato-routed"
-DEADLINE=25
+DEADLINE_GATEWAY=25
+DEADLINE_PEER=45
 EXPECTED_SUPPORT=("cerato_routed_support.py","routed_nft_inject.py","routed_firewall.py")
 
 class CutoverError(RuntimeError):
@@ -223,7 +224,7 @@ def stage_controller():
 def install_watchdog(role):
     name=timer_name(role)
     deadline=(datetime.datetime.now(datetime.timezone.utc)+
-              datetime.timedelta(minutes=DEADLINE))
+              datetime.timedelta(minutes=DEADLINE_PEER if role=='peer' else DEADLINE_GATEWAY))
     service=(f"[Unit]\nDescription=Cerato routed rollback on {role}\n"
              f"[Service]\nType=oneshot\nExecStart=/usr/bin/python3 {BIN} rollback --role {role}\n")
     timer=(f"[Unit]\nDescription=Cerato routed cutover expiration on {role}\n"
@@ -274,7 +275,10 @@ def prepare(role,support_dir):
     ensure(not BASE.exists(),"Préparation existante : statut/rollback avant nouvel essai")
     ensure(BIN.is_file(),"Installer le script dans /usr/local/sbin avant la préparation")
     if role=="peer":peer_preflight()
-    else: gateway_preflight()
+    else:
+        gateway_preflight()
+        ensure(all(not (CONTROLLER.parent/item).exists() for item in EXPECTED_SUPPORT),
+               "Modules de compatibilité déjà installés : migration inconnue")
     BASE.mkdir(parents=True,mode=0o700)
     try:
         manifest={"version":1,"role":role,"phase":"prepared","deadline":None}
@@ -408,6 +412,8 @@ def restore_runtime(role):
 
 def rollback(role):
     info=read_state(role)
+    if info['phase']=='committed':
+        command('systemctl','disable','--now',UNIT+'-'+role+'.service',check=False)
     errors=[]
     try:restore_runtime(role)
     except Exception as exc:errors.append(str(exc))
@@ -439,7 +445,7 @@ def persist(role):
         "After=network-online.target wg-quick@wg-cerato.service "
         "cerato-network-rules.service cerato-network-additional-ip.service\n"
         "Wants=network-online.target\n\n"
-        "[Service]\nType=oneshot\nRemainAfterExit=yes\n"
+        "[Service]\nType=oneshot\nRemainAfterExit=yes\nRestart=on-failure\nRestartSec=10s\n"
         f"ExecStart=/usr/bin/python3 {BIN} restore --role {role}\n"
         "[Install]\nWantedBy=multi-user.target\n"
     )
@@ -457,10 +463,14 @@ def restore(role):
     ensure(info["phase"]=="committed",
            "Restauration permanente interdite avant validation")
     if role=="peer":
+        ensure(bool(command("ip","link","show","dev",WG,check=False).returncode==0),
+               "WireGuard Dell indisponible au démarrage")
         if command("nft","list","table","ip",FW_TABLE,check=False).returncode:
             command("nft","-f","/dev/stdin",input=fw_script())
         if not address_exists(PUB,WG):
             command("ip","-4","addr","add",PUB+"/32","dev",WG)
+        if "default dev "+WG not in command("ip","-4","route","show","table",TABLE):
+            command("ip","-4","route","replace","default","dev",WG,"table",TABLE)
         rule=command("ip","-4","rule","show")
         if not re.search(r"(?m)^\s*1101:\s+from 54\.37\.165\.151(?:/32)?\s+lookup 51820",rule):
             command("ip","-4","rule","add","pref",RULE_PRIORITY,
