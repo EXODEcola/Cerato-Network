@@ -164,7 +164,13 @@ def wrap_legacy_handler(handler_class, store, *, allowed_origin: str,
         name = "do_" + verb
         old = getattr(handler_class, name, None)
         if old is None:
-            continue
+            # The real OVH legacy handler implements only GET/POST. Native
+            # account/profile mutations require PATCH/DELETE, so provide
+            # these verbs without forwarding them to any legacy operation.
+            # All non-account routes still fail closed in dispatch().
+            def unavailable(self):
+                return _reply(self, 405, {"error": "Méthode historique interdite."})
+            old = unavailable
         def gated(self, _method=old, _verb=verb):
             return bridge.dispatch(self, _verb, lambda: _method(self))
         setattr(handler_class, name, gated)
