@@ -56,6 +56,41 @@ class LegacyRoutedNftTests(unittest.TestCase):
         self.assertNotIn("flush ruleset",actual)
         self.assertNotIn("51.210.223.57",actual)
 
+    def test_accepts_single_ip_nft_pool_set_and_retains_original_guard(self):
+        old='iifname "enp1s0f0" ip daddr 54.37.165.151 drop'
+        set_guard='iifname "enp1s0f0" ip daddr { 54.37.165.151 } drop'
+        original=SAMPLE.replace(old,set_guard)
+        result=render(original)
+        self.assertEqual(result.count(set_guard),1)
+        self.assertLess(
+            result.index('ip daddr 54.37.165.151 accept'),
+            result.index('iifname "enp1s0f0" oifname "wg-cerato" drop'))
+
+    def test_accepts_multiple_ips_in_guard_and_preserves_each(self):
+        old='iifname "enp1s0f0" ip daddr 54.37.165.151 drop'
+        set_guard='iifname "enp1s0f0" ip daddr { 54.37.165.151, 54.37.165.152 } drop'
+        result=render(SAMPLE.replace(old,set_guard))
+        self.assertEqual(result.count(set_guard),1)
+        self.assertIn('iifname "enp1s0f0" oifname "wg-cerato" ip daddr 54.37.165.151 accept',result)
+        self.assertNotIn('ip daddr 54.37.165.152 accept',result)
+
+    def test_rejects_absent_or_duplicate_public_ip_in_input_pool(self):
+        old='iifname "enp1s0f0" ip daddr 54.37.165.151 drop'
+        with self.assertRaisesRegex(LegacyFirewallError,"absente"):
+            render(SAMPLE.replace(old,
+                   'iifname "enp1s0f0" ip daddr { 54.37.165.152 } drop'))
+        with self.assertRaisesRegex(LegacyFirewallError,"dupliquée"):
+            render(SAMPLE.replace(old,
+                   'iifname "enp1s0f0" ip daddr { 54.37.165.151, 54.37.165.151 } drop'))
+
+    def test_rejects_broad_input_rule_and_duplicate_drop(self):
+        old='iifname "enp1s0f0" ip daddr 54.37.165.151 drop'
+        with self.assertRaises(LegacyFirewallError):
+            render(SAMPLE.replace(old,
+                   'iifname "enp1s0f0" ip daddr { 54.37.165.151, 0.0.0.0/0 } drop'))
+        with self.assertRaisesRegex(LegacyFirewallError,"dupliqué"):
+            render(SAMPLE.replace(old,old+"\n                "+old))
+
     def test_no_routed_ip_is_exact_legacy_passthrough(self):
         self.assertEqual(render(assignments=[]),SAMPLE)
 
