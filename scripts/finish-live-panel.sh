@@ -22,7 +22,7 @@ wait_for_panel(){
   local count
   for ((count=1;count<=30;count++)); do
     if systemctl is-active --quiet "$SERVICE" &&
-       curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:8787/; then
+       curl -fs --max-time 2 -o /dev/null http://127.0.0.1:8787/; then
       echo "Port 8787 disponible après $count contrôle(s)."
       return 0
     fi
