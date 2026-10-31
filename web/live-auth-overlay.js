@@ -59,9 +59,11 @@
   }
   function action(form,caption,submit) {
     const b=button(caption,async()=>{
-      if(!form.every(field=>field.input.value.trim()))return;
+      const values=form.map(field=>field.input.type==='password'
+        ?field.input.value:field.input.value.trim());
+      if(!values.every(value=>value.length>0))return;
       b.disabled=true;
-      try{await submit(form.map(field=>field.input.value.trim()));}
+      try{await submit(values);}
       catch(e){errorMessage(b.closest('.cerato-auth-dialog'),e);}
       finally{b.disabled=false;}
     },'primary');
