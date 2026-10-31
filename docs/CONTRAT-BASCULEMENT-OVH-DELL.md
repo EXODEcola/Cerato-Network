@@ -232,3 +232,49 @@ Si le DNAT est absent dans le ruleset, corriger sa génération
 et sa persistance **avant** de retenter le mode routé. Si DNAT
 existe mais pas de paquets WG, regarder hooks FORWARD/rp_filter.
 Si WG transmet, vérifier le Dell et sa politique de retour.
+
+## Résultat décisif : tcpdump voit des SYN, PREROUTING ne les voit pas
+
+Le 31 octobre, une capture **synchronisée** sur OVH a enregistré
+six SYN TCP provenant de `82.67.7.118`, trois vers
+`54.37.165.151:22`, trois vers `54.37.165.151:8080`,
+sur `enp1s0f0`. **Dans la même fenêtre**, les compteurs
+nftables PREROUTING à priorité `-301` ont enregistré zéro
+paquet sur les deux ports, et les compteurs après DNAT et FORWARD
+sont aussi restés à zéro.
+
+Ce résultat déplace la recherche **avant PREROUTING IPv4**.
+L'hypothèse prioritaire est une **MAC Ethernet de destination
+différente de celle de `enp1s0f0`** : tcpdump, qui active par
+défaut le mode promiscuous, peut recevoir des trames destinées
+à une autre adresse MAC, mais Linux ne les délivre pas ensuite
+à la pile IPv4. Une vMAC OVH associée à l'Additional IP peut
+expliquer ce symptôme, **sans que ce soit prouvé à ce stade**.
+
+**Commande de preuve — lecture seule sur OVH :**
+
+```bash
+printf 'MAC du serveur : '
+cat /sys/class/net/enp1s0f0/address
+ip -o link show dev enp1s0f0
+sudo timeout 25 tcpdump -e -nn -l -i enp1s0f0 \
+  'tcp and dst host 54.37.165.151 and dst port 8080'
+```
+
+Pendant la capture, faire un `curl.exe -4 --connect-timeout 5
+http://54.37.165.151:8080/` depuis Windows. La destination MAC
+est le **second** champ de l'en-tête Ethernet
+`MAC_SOURCE > MAC_DESTINATION` affiché par `tcpdump -e`.
+
+- Si cette MAC **diffère** de l'adresse du NIC OVH, vérifier la
+  colonne « MAC virtuelle » de l'Additional IP dans l'espace
+  client OVHcloud, et réévaluer son association **avant tout
+  changement**. Ne pas supprimer la vMAC sans preuve : elle peut
+  être utilisée par une VM.
+- Si elle **correspond**, examiner les hooks ingress nftables,
+  TC/BPF, marques packet type, VLAN/bridge et tout filtrage
+  antérieur à PREROUTING.
+
+**Aucune modification de MAC, d'alias WAN, de tunnel ou de
+pare-feu pendant ce test.** Ne pas rebasculer le Dell tant que
+la réception L2 du paquet par le noyau OVH n'est pas réparée.
