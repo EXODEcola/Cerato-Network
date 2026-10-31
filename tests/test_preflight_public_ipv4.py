@@ -32,6 +32,16 @@ class FakeRead:
         self.calls.append(tuple(argv))
         if argv == ["ip", "link", "show", "dev", WG]:
             return "wg-cerato up"
+        if argv == ["ip", "-4", "rule", "show"]:
+            return ("0: from all lookup local\\n"
+                    "1100: from 10.77.0.2 lookup 51820\\n"
+                    + ("1200: from 8.8.4.4 lookup 51820\\n" if self.public_on_peer else "")
+                    + "5210: from all fwmark 0x80000/0xff0000 lookup main\\n"
+                    + "5270: from all lookup 52\\n")
+        if argv == ["sysctl", "-n", "net.ipv4.conf.all.rp_filter"]:
+            return "2\\n"
+        if argv == ["sysctl", "-n", "net.ipv4.conf.wg-cerato.rp_filter"]:
+            return "2\\n"
         if argv == ["ip", "-j", "-4", "addr", "show", "dev", WAN]:
             return json.dumps([{"addr_info": [
                 {"family": "inet", "local": PUB}]}] if self.public_on_wan
@@ -86,6 +96,25 @@ class PreflightTests(unittest.TestCase):
         findings = self.by_code(result)
         self.assertEqual(findings["wan_address"]["status"], "attention")
         self.assertEqual(findings["public_route"]["status"], "attention")
+
+    def test_peer_detects_vpn_table_and_loose_rp_filter(self):
+        fake = FakeRead(routed=True)
+        result = check(fake, "peer", PUB, WG, PEER, None, "local-nat", 8080)
+        findings = self.by_code(result)
+        self.assertEqual(findings["vpn_source_policy"]["status"], "ok")
+        self.assertIn("51820", findings["vpn_source_policy"]["message"])
+        self.assertEqual(findings["rp_filter"]["status"], "ok")
+        self.assertIn("souple", findings["rp_filter"]["message"])
+        self.assertEqual(findings["nat_return_route"]["status"], "ok")
+        self.assertNotIn("0x80000", str(result))
+
+    def test_routed_public_ip_requires_distinct_source_rule(self):
+        fake = FakeRead(routed=True, public_on_peer=False)
+        result = check(fake, "peer", PUB, WG, PEER, None, "routed-wg", 8080)
+        self.assertEqual(self.by_code(result)["public_source_policy"]["status"], "attention")
+        fake = FakeRead(routed=True, public_on_peer=True)
+        result = check(fake, "peer", PUB, WG, PEER, None, "routed-wg", 8080)
+        self.assertEqual(self.by_code(result)["public_source_policy"]["status"], "ok")
 
     def test_local_nat_peer_flags_asymmetric_reply_without_assuming_snat(self):
         fake = FakeRead(routed=False)
