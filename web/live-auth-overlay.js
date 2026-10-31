@@ -136,6 +136,77 @@
     // its existing /api/session and /api/status handlers using the new cookie.
     location.reload();
   }
+  function editAccount(acc) {
+    if(!state.account || state.account.role==='user' ||
+       acc.role==='owner' || acc.id===state.account.id)return;
+    const panel=overlay('Modifier un compte',acc.email+' · '+(label[acc.role]||acc.role));
+    const roleField=element('label','cerato-auth-field');
+    roleField.append(element('span','','Rôle du compte'));
+    const roleSelect=element('select','cerato-auth-select');
+    [['user','Utilisateur — lecture seule'],['admin','Administrateur']].forEach(([value,text])=>{
+      const option=element('option','',text);option.value=value;roleSelect.append(option);
+    });
+    roleSelect.value=acc.role;roleField.append(roleSelect);
+    const password=control('Réinitialiser le mot de passe (facultatif)',
+      'password','Nouveau mot de passe — 14 caractères minimum','new-password');
+    password.input.required=false;
+    password.input.minLength=14;
+    panel.append(roleField,password.wrap);
+    panel.append(button('Enregistrer les modifications',async()=>{
+      const changes={};
+      if(roleSelect.value!==acc.role)changes.role=roleSelect.value;
+      if(password.input.value)changes.new_password=password.input.value;
+      if(!Object.keys(changes).length){
+        return errorMessage(panel,Error('Aucune modification à enregistrer.'));
+      }
+      if(!confirm('Appliquer ces changements ? Les sessions du compte seront révoquées.'))return;
+      try{
+        await call('/api/accounts/'+acc.id,'PATCH',changes);
+        await accounts();
+      }catch(err){errorMessage(panel,err);}
+    },'primary'));
+    if(acc.role==='admin'){
+      panel.append(button('Réinitialiser la double authentification',async()=>{
+        if(!confirm('Révoquer la 2FA et les sessions de '+acc.email+
+                    ' ? Le compte devra reconfigurer son application TOTP.'))return;
+        try{await call('/api/accounts/'+acc.id,'PATCH',{reset_mfa:true});await accounts();}
+        catch(err){errorMessage(panel,err);}
+      }));
+    }
+    panel.append(button('Retour aux comptes',()=>accounts().catch(err=>errorMessage(panel,err))));
+  }
+  function myProfile() {
+    if(!state.account)return;
+    const panel=overlay('Mon profil',state.account.email+' · '+
+                        (label[state.account.role]||state.account.role));
+    const current=control('Mot de passe actuel','password',
+      'Obligatoire pour confirmer','current-password');
+    const email=control('Nouvel e-mail (facultatif)','email',
+      state.account.email,'email');
+    email.input.required=false;
+    const password=control('Nouveau mot de passe (facultatif)','password',
+      '14 caractères minimum','new-password');
+    password.input.required=false;
+    password.input.minLength=14;
+    panel.append(current.wrap,email.wrap,password.wrap);
+    panel.append(button('Modifier mes identifiants',async()=>{
+      const data={current_password:current.input.value};
+      if(email.input.value.trim() && email.input.value.trim()!==state.account.email){
+        data.email=email.input.value.trim();
+      }
+      if(password.input.value)data.new_password=password.input.value;
+      if(!data.current_password || Object.keys(data).length===1){
+        return errorMessage(panel,Error('Mot de passe actuel et changement requis.'));
+      }
+      if(!confirm('Modifier vos identifiants ? Vous devrez vous reconnecter.'))return;
+      try{
+        await call(endpoint+'me','PATCH',data);
+        state.account=null;state.csrf='';
+        location.reload();
+      }catch(err){errorMessage(panel,err);}
+    },'primary'));
+    panel.append(button('Fermer',()=>document.getElementById(ROOT_ID)?.remove()));
+  }
   async function accounts() {
     const panel=overlay('Comptes et permissions','Gestion des accès au routeur Cerato Network.');
     const result=await call('/api/accounts');
@@ -143,13 +214,19 @@
     (result.accounts||[]).forEach(acc=>{
       const item=element('div','cerato-account-row');
       const description=element('span','',acc.email+' · '+(label[acc.role]||acc.role));
-      item.append(description);
+      item.append(description,element('span','cerato-account-status',
+        acc.active?'Actif':'Désactivé'));
       if(acc.role!=='owner' && acc.id!==state.account.id){
-        item.append(button(acc.active?'Désactiver':'Réactiver',async()=>{
+        const actions=element('div','cerato-account-row-actions');
+        actions.append(button('Modifier',()=>editAccount(acc)));
+        actions.append(button(acc.active?'Désactiver':'Réactiver',async()=>{
           if(!confirm('Modifier l’accès de '+acc.email+' ?'))return;
-          await call('/api/accounts/'+acc.id,'PATCH',{active:!acc.active});
-          await accounts();
+          try{
+            await call('/api/accounts/'+acc.id,'PATCH',{active:!acc.active});
+            await accounts();
+          }catch(err){errorMessage(panel,err);}
         }));
+        item.append(actions);
       }
       listing.append(item);
     });
@@ -179,6 +256,7 @@
     const target=document.querySelector('.topbar,.top-bar,header.topbar')||document.querySelector('header');
     if(!target || document.getElementById('cerato-account-actions'))return;
     const box=element('div','cerato-account-actions');box.id='cerato-account-actions';
+    box.append(button('Mon profil',myProfile));
     if(state.account.role!=='user')box.append(button('Comptes et accès',()=>{
       accounts().catch(err=>errorMessage(overlay('Erreur d’accès',''),err));
     }));
