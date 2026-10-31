@@ -90,6 +90,16 @@ class StageNativeLoginTests(unittest.TestCase):
                 stage(source,out,baseline=baseline)
             self.assertFalse(out.exists())
 
+    def test_frontend_hash_drift_blocks_before_any_file_is_written(self):
+        with tempfile.TemporaryDirectory() as root:
+            source,baseline=self.fixture(root)
+            app=source/"web/app.js"
+            app.write_bytes(app.read_bytes()+b"\n// changed without approval")
+            destination=Path(root)/"auth-stage"
+            with self.assertRaisesRegex(NativeAuthUIStageError,"frontend non approuvée"):
+                stage(source,destination,baseline=baseline)
+            self.assertFalse(destination.exists())
+
     def test_css_marker_and_existing_overlay_required(self):
         with tempfile.TemporaryDirectory() as root:
             source,baseline=self.fixture(root)
