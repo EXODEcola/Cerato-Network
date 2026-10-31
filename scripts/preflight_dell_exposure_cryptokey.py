@@ -57,7 +57,7 @@ def gateway_cryptokey(raw, vpn_gateway_ip):
                 continue
             nets=[]
             for value in parts[1:]:
-                nets.append(ipaddress.ip_network(value,strict=False))
+                nets.append(ipaddress.ip_network(value.strip(','),strict=False))
             if any(gateway in network for network in nets):
                 found.append(nets)
     except ValueError:
@@ -173,11 +173,15 @@ def check(readfn,*,public_ip,vpn_gateway_ip,tunnel):
         v6_data=None
     ipv6_global=None
     if v6_data is not None:
-        ipv6_global=any(
-            isinstance(info,dict) and isinstance(info.get("local"),str) and
-            ipaddress.ip_address(info["local"]).is_global
-            for row in v6_data if isinstance(row,dict)
-            for info in row.get("addr_info",[]))
+        try:
+            ipv6_global=any(
+                isinstance(info,dict) and isinstance(info.get("local"),str) and
+                ipaddress.ip_address(info["local"]).version==6 and
+                ipaddress.ip_address(info["local"]).is_global
+                for row in v6_data if isinstance(row,dict)
+                for info in row.get("addr_info",[]))
+        except ValueError:
+            ipv6_global=None
     tcp=listeners(outputs["tcp"])
     udp=listeners(outputs["udp"])
     nft=nft_input_hooks(outputs["nft"])
