@@ -326,8 +326,23 @@ def prepare(role,support_dir):
         state_save(manifest)
         return {"status":"armed","role":role,"deadline":deadline,
                 "network_modified":False}
-    except Exception:
-        # No network changes have been made by prepare.
+    except BaseException:
+        # prepare() never changes kernel routes, WG peers, nft, or addresses.
+        # A failed dry-run must not strand BASE and prevent the next try.
+        # Unregister only the watchdog name created specifically for this run.
+        name=timer_name(role)
+        command("systemctl","disable","--now",name+".timer",check=False)
+        if command("systemctl","is-active","--quiet",name+".timer",
+                   check=False).returncode==0:
+            raise CutoverError("Préparation interrompue : timer rollback encore actif, intervention requise")
+        unit_dir=Path("/etc/systemd/system")
+        for suffix in (".timer",".service"):
+            unit=unit_dir/(name+suffix)
+            if unit.is_file() and not unit.is_symlink():
+                unit.unlink()
+        command("systemctl","daemon-reload",check=False)
+        if BASE.exists() and BASE.is_dir() and not BASE.is_symlink():
+            shutil.rmtree(BASE)
         raise
 
 def planned_configs(peer_name):
