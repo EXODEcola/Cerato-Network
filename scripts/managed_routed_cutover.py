@@ -456,7 +456,7 @@ def reset_restored(role):
     if role=="peer":
         ensure(not address_exists(PUB,WG),"L'IPv4 est encore sur le Dell")
         rule=command("ip","-4","rule","show")
-        ensure(not re.search(r"(?m)^\\s*"+str(RULE_PRIORITY)+r":",rule),
+        ensure(not re.search(r"(?m)^\s*"+str(RULE_PRIORITY)+r":",rule),
                "Une règle de priorité 1101 existe encore")
         ensure(command("nft","list","table","ip",FW_TABLE,
                        check=False).returncode!=0,
