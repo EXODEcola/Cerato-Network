@@ -83,6 +83,68 @@ class ManagedCutoverTests(TestCase):
         self.assertEqual(installer.VPN,"10.77.0.2")
         self.assertEqual(installer.RULE_PRIORITY,1101)
 
+    def test_recover_orphan_refuses_active_state_before_any_change(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as d:
+            p=Path(d)
+            (p/"state.json").write_text('{"phase":"armed"}')
+            with patch.object(installer,"BASE",p), patch.object(installer,"command") as cmd:
+                with self.assertRaises(installer.CutoverError):
+                    installer.recover_orphan_preparation("gateway")
+                cmd.assert_not_called()
+            self.assertTrue(p.exists())
+
+    def test_recover_orphan_refuses_unknown_file_without_network_mutation(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as d:
+            p=Path(d)
+            (p/"unexpected").write_text("keep me")
+            with patch.object(installer,"BASE",p), patch.object(installer,"command") as cmd:
+                with self.assertRaises(installer.CutoverError):
+                    installer.recover_orphan_preparation("gateway")
+                cmd.assert_not_called()
+            self.assertTrue((p/"unexpected").is_file())
+
+    def test_recover_orphan_archives_only_unchanged_gateway(self):
+        from tempfile import TemporaryDirectory
+        from types import SimpleNamespace
+        with TemporaryDirectory() as d:
+            p=Path(d)/"original"
+            p.mkdir()
+            (p/"config.before").write_text("known config")
+            live=Path(d)/"current"
+            live.write_text("known config")
+            shell_units=Path(d)/"systemd"
+            shell_units.mkdir()
+            def cmd(*args,**kwargs):
+                if args[:3]==("systemctl","is-active","--quiet"):
+                    return SimpleNamespace(returncode=3)
+                if args[:5]==("nft","list","chain","ip","cerato_network"):
+                    return ('table ip cerato_network { chain prerouting { '
+                            'ip daddr 54.37.165.151 tcp dport 8080 '
+                            'dnat to 10.77.0.2:8080 } }')
+                raise AssertionError(args)
+            original_path=installer.Path
+            def remap(arg):
+                if str(arg)=="/etc/systemd/system":return shell_units
+                return original_path(arg)
+            with patch.object(installer,"BASE",p),\
+                 patch.object(installer,"Path",side_effect=remap),\
+                 patch.object(installer,"gateway_preflight"),\
+                 patch.object(installer,"wg_peer",return_value=(
+                     "dell",{"pubkey":"synthetic"})),\
+                 patch.object(installer,"wg_allowed",return_value=["10.77.0.2/32"]),\
+                 patch.object(installer,"CONTROLLER",Path(d)/"controller"),\
+                 patch.object(installer,"CFG",live),\
+                 patch.object(installer,"STATE",Path(d)/"managed"),\
+                 patch.object(installer,"EXPECTED_SUPPORT",()),\
+                 patch.object(installer,"command",side_effect=cmd):
+                result=installer.recover_orphan_preparation("gateway")
+            self.assertEqual(result["status"],"orphan_archived")
+            self.assertFalse(p.exists())
+            self.assertTrue(original_path(result["archive"]).is_dir())
+            self.assertFalse(result["network_modified"])
+
     def test_reset_refuses_non_restored_and_never_executes_mutation(self):
         with patch.object(installer,"read_state",return_value={
                 "role":"peer","version":1,"phase":"armed"}):
