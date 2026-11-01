@@ -106,7 +106,7 @@ def transform(raw):
         ast.parse(rewritten)
     except (SyntaxError,ValueError,TypeError) as exc:
         raise StageError("Transformation AST invalide") from exc
-    ensure_header = rewritten.startswith("#!/usr/bin/env python3\\n")
+    ensure_header = rewritten.startswith("#!/usr/bin/env python3\n")
     if not ensure_header:
         raise StageError("En-tête Python exécutable absent")
     return rewritten.encode("utf-8")
