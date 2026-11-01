@@ -282,7 +282,14 @@ def generate_routed_rules(cfg):
 
 def prepare(role,support_dir):
     ensure(os.geteuid()==0,"Root requis")
-    ensure(not BASE.exists(),"Préparation existante : statut/rollback avant nouvel essai")
+    ensure(not BASE.exists() and not BASE.is_symlink(),
+           "Préparation existante : statut/rollback avant nouvel essai")
+    unit_dir=Path("/etc/systemd/system")
+    watchdog=timer_name(role)
+    ensure(all(not (unit_dir/(watchdog+suffix)).exists()
+               and not (unit_dir/(watchdog+suffix)).is_symlink()
+               for suffix in (".timer",".service")),
+           "Unités rollback existantes sans état : intervention requise")
     ensure(BIN.is_file(),"Installer le script dans /usr/local/sbin avant la préparation")
     if role=="peer":peer_preflight()
     else:
