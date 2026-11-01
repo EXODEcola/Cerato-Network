@@ -20,7 +20,7 @@ import sys
 import tempfile
 import zipfile
 
-RELEASE_PATTERN = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-(?:beta|rc)\.[0-9]+)?$")
+RELEASE_PATTERN = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-(?:dev|beta|rc)\.[0-9]+)?$")
 REQUIRED = {"LICENSE", "README.md"}
 BLOCKED_SEGMENTS = {".git", ".venv", "venv", "node_modules", "__pycache__",
                     "secrets", "private", "credentials", "artifacts", "dist"}
@@ -137,7 +137,7 @@ def validate_archive(archive: bytes):
 
 def build(source: Path, out: Path, tag: str, private_key: Path):
     if not RELEASE_PATTERN.fullmatch(tag):
-        raise PackageError("Version attendue : v1.2.3 ou v1.2.3-beta.1")
+        raise PackageError("Version attendue : v1.2.3, v1.2.3-dev.1 ou v1.2.3-beta.1")
     source = source.resolve(strict=True)
     out = out.resolve()
     if out == source or source in out.parents:

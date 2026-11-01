@@ -16,12 +16,12 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"tools"))
 from build_release import verify, PackageError
 
-VERSION=re.compile(r"^v\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?$")
+VERSION=re.compile(r"^v\d+\.\d+\.\d+(?:-(?:dev|beta|rc)\.\d+)?$")
 
 
 def release_info(release_dir: str = "", public_key: str = "", installed_version: str = "",
                  channel: str = "stable") -> dict:
-    if channel not in ("stable","beta"):
+    if channel not in ("stable","beta","dev"):
         return {"configured":False,"reason":"Canal invalide","installed_version":installed_version or None}
     if installed_version and not VERSION.fullmatch(installed_version):
         return {"configured":False,"reason":"Version locale invalide","installed_version":None}
@@ -42,7 +42,13 @@ def release_info(release_dir: str = "", public_key: str = "", installed_version:
         return result
     version=manifest["version"]
     if channel=="stable" and "-" in version:
-        result["reason"]="Release bêta incompatible avec le canal stable"
+        result["reason"]="Prerelease incompatible avec stable"
+        return result
+    if channel=="dev" and "-dev." not in version:
+        result["reason"]="Release incompatible avec le canal Dev"
+        return result
+    if channel=="beta" and "-beta." not in version:
+        result["reason"]="Release incompatible avec le canal Beta"
         return result
     result.update(configured=True, verified=True, available_version=version,
                   artifact_size=manifest["size"], sha256=manifest["sha256"],

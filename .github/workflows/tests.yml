@@ -6,6 +6,50 @@ name: Cerato Network - Tests de developpement
 on:
   push:
     branches: [feature/secure-accounts, main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'network/**'
+      - 'scripts/preflight_public_ipv4.py'
+      - 'scripts/audit_routed_cutover_dependencies.py'
+      - 'scripts/inspect_live_network_engine.py'
+      - 'scripts/inspect_live_controller_semantics.py'
+      - 'scripts/review_live_network_generators.py'
+      - 'scripts/stage_live_routed_controller.py'
+      - 'scripts/verify_staged_routed_controller.py'
+      - 'scripts/dry_run_staged_routed_controller.py'
+      - 'scripts/preflight_dell_routed_peer.py'
+      - 'scripts/preflight_dell_exposure_cryptokey.py'
+      - 'scripts/inspect_nft_forwarding_path.py'
+      - 'scripts/inspect_nft_chain_jumps.py'
+      - 'scripts/inspect_live_nat_8080.py'
+      - 'scripts/managed_routed_cutover.py'
+      - 'scripts/repair_live_ceratoctl_shebang.py'
+      - 'tests/test_repair_live_ceratoctl_shebang.py'
+      - 'tests/test_managed_routed_cutover.py'
+      - 'tests/test_inspect_live_nat_8080.py'
+      - 'tests/test_inspect_nft_chain_jumps.py'
+      - 'tests/test_inspect_nft_forwarding_path.py'
+      - 'tests/test_preflight_dell_exposure_cryptokey.py'
+      - 'network/two_host_cutover_contract.py'
+      - 'network/two_host_rollback_rehearsal.py'
+      - 'tests/test_two_host_cutover_contract.py'
+      - 'tests/test_two_host_rollback_rehearsal.py'
+      - 'tests/test_preflight_dell_routed_peer.py'
+      - 'tests/test_dry_run_staged_routed_controller.py'
+      - 'tests/test_verify_staged_routed_controller.py'
+      - 'tests/test_stage_live_routed_controller.py'
+      - 'tests/test_review_live_network_generators.py'
+      - 'tests/test_inspect_live_controller_semantics.py'
+      - 'tests/test_inspect_live_network_engine.py'
+      - 'tests/test_preflight_public_ipv4.py'
+      - 'tests/test_audit_routed_cutover_dependencies.py'
+      - 'tests/test_dev_*.py'
+      - 'updates/**'
+      - 'tools/**'
+      - '.github/workflows/publish-signed-release.yml'
+      - 'docs/DIAGNOSTIC-IPV4-PUBLIQUE-WIREGUARD.md'
+      - '.github/workflows/tests.yml'
   workflow_dispatch:
 
 permissions:
@@ -32,7 +76,7 @@ jobs:
       - name: Installer les dependances de test (CI seulement)
         run: python -m pip install -r security/requirements.txt
       - name: Syntaxe Python
-        run: python -m compileall -q security gateway network updates tools tests integrations integration
+        run: python -m compileall -q security gateway network updates tools tests integrations integration scripts/preflight_public_ipv4.py scripts/audit_routed_cutover_dependencies.py scripts/inspect_live_network_engine.py scripts/inspect_live_controller_semantics.py scripts/review_live_network_generators.py scripts/stage_live_routed_controller.py scripts/verify_staged_routed_controller.py scripts/dry_run_staged_routed_controller.py scripts/preflight_dell_routed_peer.py scripts/preflight_dell_exposure_cryptokey.py scripts/inspect_nft_forwarding_path.py scripts/inspect_nft_chain_jumps.py scripts/inspect_live_nat_8080.py scripts/managed_routed_cutover.py scripts/repair_live_ceratoctl_shebang.py
       - name: Lancer toutes les suites unitaires
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Syntaxe JavaScript

@@ -15,7 +15,7 @@ SCHEMA="cerato-network-legacy-web-overlay-v1"
 FILES=("backend/server.py","web/app.js","web/style.css")
 VISUAL_FILES=("web/app.js","web/style.css")
 VISUAL_SCHEMA="cerato-network-legacy-web-visual-v1"
-VERSION=re.compile(r"^v\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?$")
+VERSION=re.compile(r"^v\d+\.\d+\.\d+(?:-(?:dev|beta|rc)\.\d+)?$")
 
 
 class OverlayError(Exception):

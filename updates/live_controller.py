@@ -74,7 +74,7 @@ def _settings():
     doc=json.loads(SETTING.read_text(encoding="utf8"))
     if not isinstance(doc,dict) or set(doc)!={"base_url","channel","public_key"}:
         raise UpdateError("Paramètres de distribution invalides")
-    if doc["channel"] not in ("stable","beta"):
+    if doc["channel"] not in ("stable","beta","dev"):
         raise UpdateError("Canal de releases invalide")
     key=Path(doc["public_key"])
     if (key.is_symlink() or not key.is_file() or key.stat().st_uid!=0 or
@@ -204,6 +204,25 @@ def _replace(files):
             os.replace(path,source)
         finally:
             Path(path).unlink(missing_ok=True)
+
+
+def _controller_executable_ok(controller=Path("/usr/local/sbin/ceratoctl")):
+    """Reject Web upgrades when the root network CLI is not executable Python.
+
+    A broken direct entrypoint can leave the HTML Web process healthy while
+    every authenticated API call fails. Never change networking here.
+    """
+    if controller.is_symlink() or not controller.is_file():
+        return False
+    try:
+        with controller.open("rb") as stream:
+            first=stream.readline(120)
+        if not first.startswith(b"#!") or b"python" not in first.lower():
+            return False
+        response=_cmd(str(controller),"status",timeout=12)
+        return isinstance(json.loads(response),dict)
+    except (OSError,ValueError,UpdateError):
+        return False
 
 
 def _web_ok():
@@ -360,6 +379,8 @@ def apply():
             if not shutil.which("node"):
                 raise UpdateError("Node.js requis pour la validation du JavaScript")
             _cmd("node","--check",str(Path(folder)/"web/app.js"))
+    if not _controller_executable_ok():
+        raise UpdateError("Contrôleur réseau Cerato invalide : mise à jour Web refusée, réparer ceratoctl")
     if not _web_ok():
         raise UpdateError("Le panneau existant est déjà en défaut")
     previous_network=_network_fingerprint()

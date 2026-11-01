@@ -89,16 +89,34 @@ def state_read():
     if STATE.is_symlink():
         raise IPError("État Cerato symbolique refusé")
     if not STATE.exists():
-        return {"schema":1,"local_ipv4":[]}
+        return {"schema":1,"local_ipv4":[],"routed_ipv4":[]}
     record=json.loads(STATE.read_text(encoding="utf8"))
     if record.get("schema")!=1 or not isinstance(record.get("local_ipv4"),list):
         raise IPError("Fichier d'état Cerato invalide")
-    if len(record["local_ipv4"])>256:
-        raise IPError("Trop d'adresses gérées")
+    routed=record.get("routed_ipv4",[])
+    if not isinstance(routed,list) or len(record["local_ipv4"])+len(routed)>256:
+        raise IPError("Trop d'adresses gérées ou liste routée invalide")
+    local_ips=set()
+    routed_ips=set()
     for entry in record["local_ipv4"]:
-        validate_public(entry["ip"])
+        ip=validate_public(entry["ip"])
+        if ip in local_ips:
+            raise IPError("IPv4 locale dupliquée dans l'état")
+        local_ips.add(ip)
         if not IFACE.fullmatch(entry["wan"]):
             raise IPError("Nom WAN invalide dans la configuration")
+    for entry in routed:
+        if not isinstance(entry,dict) or set(entry)!={"ip","peer","wan"}:
+            raise IPError("Entrée IPv4 routée invalide")
+        ip=validate_public(entry["ip"])
+        if ip in local_ips or ip in routed_ips:
+            raise IPError("Une IPv4 ne peut être locale et routée simultanément")
+        routed_ips.add(ip)
+        if (not isinstance(entry["wan"],str) or not IFACE.fullmatch(entry["wan"])
+                or not isinstance(entry["peer"],str)
+                or not re.fullmatch(r"[a-z][a-z0-9-]{0,39}",entry["peer"])):
+            raise IPError("Pair ou interface routée invalide")
+    record.setdefault("routed_ipv4",[])
     return record
 
 
@@ -135,9 +153,11 @@ def status():
     wan,primary=effective_wan(cfg)
     active=listed(wan)
     state=state_read()
+    routed=[{"ip":x["ip"],"present_on_wan":x["ip"] in active,
+             "mode":"routed-wg","peer":x["peer"]} for x in state["routed_ipv4"]]
     return {"wan":wan,"primary_ipv4":primary,
             "managed":[{"ip":x["ip"],"present":x["ip"] in active,"mode":"local-nat"}
-                       for x in state["local_ipv4"]],
+                       for x in state["local_ipv4"]]+routed,
             "pool":cfg["pool"],"mappings":len(cfg["mappings"])}
 
 
@@ -161,6 +181,8 @@ def import_local(ip):
     present=address in listed(wan)
     state=state_read()
     existing={item["ip"] for item in state["local_ipv4"]}
+    if address in {item["ip"] for item in state["routed_ipv4"]}:
+        raise IPError("IPv4 réservée au routage : import local refusé")
     if address in existing:
         return {"ip":address,"wan":wan,"already_managed":True,
                 "present":present}
@@ -209,12 +231,13 @@ def adopt_existing_pool():
     observed=listed(wan)
     state=state_read()
     known={item["ip"] for item in state["local_ipv4"]}
+    routed={item["ip"] for item in state["routed_ipv4"]}
     added=[]
     for address in cfg["pool"]:
         ip=validate_public(address)
         if ip==primary:
             raise IPError("IPv4 principale découverte dans le pool; migration refusée")
-        if ip not in known and ip in observed:
+        if ip not in known and ip not in routed and ip in observed:
             state["local_ipv4"].append({"ip":ip,"wan":wan,"preexisting":True})
             known.add(ip)
             added.append(ip)
@@ -222,6 +245,36 @@ def adopt_existing_pool():
         save(state)
     return {"adopted":added,"wan":wan,
             "ignored_absent":sorted(set(cfg["pool"])-observed)}
+
+
+def plan_routed_state_after_cutover(ip,peer,*,config=None,state=None):
+    """Produce (do not save) persistent mode state after an independently verified cutover.
+
+    This never touches interfaces or files. An orchestrator must first migrate
+    the WAN /32 and current NAT and verify remote routing with autonomous rollback.
+    """
+    cfg=config if config is not None else read_config()
+    old=state if state is not None else state_read()
+    address=validate_public(ip)
+    if not isinstance(peer,str) or peer not in cfg["peers"]:
+        raise IPError("Machine de routage inconnue")
+    if address not in cfg["pool"]:
+        raise IPError("IPv4 absente du pool Cerato")
+    if any(isinstance(m,dict) and m.get("public_ip")==address
+           for m in cfg["mappings"]):
+        raise IPError("Publication NAT active : migration non confirmée")
+    if any(row["ip"]==address for row in old.get("routed_ipv4",[])):
+        raise IPError("Adresse déjà enregistrée comme routée")
+    source=[e for e in old["local_ipv4"] if e["ip"]==address]
+    if len(source)!=1:
+        raise IPError("Adresse locale persistante inconnue")
+    import copy
+    candidate=copy.deepcopy(old)
+    candidate["local_ipv4"]=[e for e in candidate["local_ipv4"]
+                              if e["ip"]!=address]
+    candidate.setdefault("routed_ipv4",[]).append(
+        {"ip":address,"peer":peer,"wan":source[0]["wan"]})
+    return candidate
 
 
 def remove_local(ip):

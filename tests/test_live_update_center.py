@@ -46,6 +46,24 @@ function bind(){const r=$('#refresh-btn');if(r)r.onclick=refresh;document.queryS
 })();"""
 
 
+class NetworkControllerUpdaterSafetyTests(unittest.TestCase):
+    def test_update_controller_rejects_python_without_shebang(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe=Path(directory)/"ceratoctl"
+            exe.write_text('import json; print(json.dumps({"ok": True}))\\n'.replace('\\n','\n'))
+            with patch.object(ctl,"_cmd") as call:
+                self.assertFalse(ctl._controller_executable_ok(exe))
+                call.assert_not_called()
+
+    def test_update_controller_accepts_executable_python_with_json_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe=Path(directory)/"ceratoctl"
+            exe.write_bytes(b"#!/usr/bin/env python3\\nprint('ok')\\n".replace(b"\\n",b"\n"))
+            with patch.object(ctl,"_cmd",return_value='{"ok":true}') as call:
+                self.assertTrue(ctl._controller_executable_ok(exe))
+                call.assert_called_once_with(str(exe),"status",timeout=12)
+
+
 class LiveUpdateCenterTests(unittest.TestCase):
     def test_backend_keeps_existing_handlers_and_csrf(self):
         patched=patch_backend(SERVER_SAMPLE)
