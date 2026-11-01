@@ -67,6 +67,15 @@ class ManagedCutoverTests(TestCase):
         self.assertGreater(installer.DEADLINE_PEER,installer.DEADLINE_GATEWAY)
         self.assertGreaterEqual(installer.DEADLINE_GATEWAY,20)
 
+    def test_preparation_references_source_helper_not_installed_alias(self):
+        self.assertEqual(installer.INPUT_SUPPORT, (
+            "live_routed_compat.py","routed_nft_inject.py","routed_firewall.py"))
+        self.assertEqual(installer.EXPECTED_SUPPORT, (
+            "cerato_routed_support.py","routed_nft_inject.py","routed_firewall.py"))
+        source=PATH.read_text()
+        self.assertIn('for item in (*INPUT_SUPPORT,"stage_live_routed_controller.py"):',source)
+        self.assertIn('for filename in EXPECTED_SUPPORT:',source)
+
     def test_source_controller_pinned_to_live_observed_sha(self):
         self.assertEqual(installer.SOURCE_SHA,
             "41e11e267af622b608a40403d1d8d976903e9ea88470a078a7e568854935f2b6")
