@@ -6,7 +6,7 @@ inattendu. Ils n'utilisent pas OVHcloud API : attendre la confirmation définiti
 de suppression de la MAC virtuelle et sa propagation.
 
 Les scripts sont épinglés à ce commit de développement :
-`4107c484b2176d55ef0a002b062d1823052237da`.
+`823dee5bc90bd48ae31a1471ff17eeb26685b0d2`.
 Garder deux consoles SSH séparées, OVH `51.210.223.57` et Dell via Tailscale
 `100.74.84.71`. Ne pas redémarrer pendant l'activation.
 
@@ -36,13 +36,40 @@ sur le Dell si son état n'est pas `restored`. Ce correctif n'active
 ni l'IP ni un service. Il ne dispense pas d'attendre la
 **suppression effective** de la MAC virtuelle chez OVHcloud.
 
+## Installation du script sans dépendre de l'ancien dépôt Git local
+
+Si `git show` répond « path does not exist » alors que le commit
+existe sur GitHub, récupérer uniquement le script depuis l'URL
+immuable du commit, avec HTTPS et arrêt immédiat en cas d'échec.
+Cette opération **n'active pas le réseau** :
+
+```bash
+REV=823dee5bc90bd48ae31a1471ff17eeb26685b0d2
+curl --fail --location --show-error --silent \
+  "https://raw.githubusercontent.com/EXODEcola/Cerato-Network/$REV/scripts/managed_routed_cutover.py" \
+  --output /tmp/cerato-routed-cutover.py
+python3 -m py_compile /tmp/cerato-routed-cutover.py
+sudo install -o root -g root -m 0755 \
+  /tmp/cerato-routed-cutover.py /usr/local/sbin/cerato-routed-cutover
+```
+
+Sur le Dell qui est déjà en état `restored` (rollback sans erreurs) :
+
+```bash
+sudo /usr/local/sbin/cerato-routed-cutover reset --role peer
+```
+
+La commande doit archiver le dossier `routed-54-37-165-151`.
+Si le statut est autre que `reset_to_prepared_state`, ne pas
+commencer les étapes d'activation.
+
 ## 1. Dell — préparer et activer temporairement l'adresse
 
 ```bash
 set -euo pipefail
 cd ~/Cerato-Network-preflight
 git fetch origin feature/public-ip-path-preflight
-REV=4107c484b2176d55ef0a002b062d1823052237da
+REV=823dee5bc90bd48ae31a1471ff17eeb26685b0d2
 git cat-file -e "$REV^{commit}"
 git show "$REV:scripts/managed_routed_cutover.py" | sudo tee /usr/local/sbin/cerato-routed-cutover >/dev/null
 sudo chmod 755 /usr/local/sbin/cerato-routed-cutover
@@ -60,7 +87,7 @@ explicitement publiés. Le LAN, Tailscale et l'IPv6 ne sont pas modifiés.
 set -euo pipefail
 cd ~/Cerato-Network
 git fetch origin feature/public-ip-path-preflight
-REV=4107c484b2176d55ef0a002b062d1823052237da
+REV=823dee5bc90bd48ae31a1471ff17eeb26685b0d2
 git cat-file -e "$REV^{commit}"
 SUPPORT="$(sudo mktemp -d /root/cerato-routed-support.XXXXXXXX)"
 for f in live_routed_compat.py routed_nft_inject.py routed_firewall.py; do
