@@ -102,10 +102,13 @@ def transform(raw):
         point+=1
     tree.body.insert(point,imports)
     try:
-        rewritten=ast.unparse(ast.fix_missing_locations(tree))+"\n"
+        rewritten="#!/usr/bin/env python3\n"+ast.unparse(ast.fix_missing_locations(tree))+"\n"
         ast.parse(rewritten)
     except (SyntaxError,ValueError,TypeError) as exc:
         raise StageError("Transformation AST invalide") from exc
+    ensure_header = rewritten.startswith("#!/usr/bin/env python3\\n")
+    if not ensure_header:
+        raise StageError("En-tête Python exécutable absent")
     return rewritten.encode("utf-8")
 
 
