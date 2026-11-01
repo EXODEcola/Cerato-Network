@@ -22,7 +22,7 @@ Sur OVH RISE-1 seulement, avec SSH par l'IPv4 de gestion
 
 ```bash
 set -euo pipefail
-REV=INSERT_PINNED_REV
+REV=5aa3c092c5b07f4d85a053500bb68efca4404ee7
 FILE="$(mktemp /tmp/cerato-shebang.XXXXXXXX.py)"
 curl -fLsS --retry 3 \
   "https://raw.githubusercontent.com/EXODEcola/Cerato-Network/$REV/scripts/repair_live_ceratoctl_shebang.py" \
