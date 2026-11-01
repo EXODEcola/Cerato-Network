@@ -74,6 +74,67 @@ class ManagedCutoverTests(TestCase):
         self.assertEqual(installer.VPN,"10.77.0.2")
         self.assertEqual(installer.RULE_PRIORITY,1101)
 
+    def test_reset_refuses_non_restored_and_never_executes_mutation(self):
+        with patch.object(installer,"read_state",return_value={
+                "role":"peer","version":1,"phase":"armed"}):
+            with patch.object(installer,"command") as shell:
+                with self.assertRaises(installer.CutoverError):
+                    installer.reset_restored("peer")
+                shell.assert_not_called()
+
+    def test_reset_rejects_active_watchdog_or_routing_rule(self):
+        def command(*args,**kw):
+            if args[:3]==("systemctl","is-active","--quiet"):
+                return type("R",(),{"returncode":1})()
+            if args[:3]==("systemctl","is-enabled","--quiet"):
+                return type("R",(),{"returncode":1})()
+            if args[:3]==("ip","-4","rule"):
+                return "1101: from 54.37.165.151 lookup 51820\n"
+            raise AssertionError("Unexpected read: "+str(args))
+        with patch.object(installer,"read_state",return_value={
+                "role":"peer","version":1,"phase":"restored"}):
+            with patch.object(installer,"command",side_effect=command):
+                with patch.object(installer,"address_exists",return_value=False):
+                    with self.assertRaises(installer.CutoverError):
+                        installer.reset_restored("peer")
+
+    def test_reset_archives_only_after_complete_rollback(self):
+        from tempfile import TemporaryDirectory
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        with TemporaryDirectory() as folder:
+            root=Path(folder)
+            base=root/"cutover"
+            base.mkdir()
+            (base/"state.json").write_text('{"phase":"restored"}')
+            units=root/"systemd"
+            units.mkdir()
+            (units/"cerato-routed-rollback-peer.timer").write_text("timer")
+            (units/"cerato-routed-rollback-peer.service").write_text("service")
+            def mock_command(*args,**kw):
+                if args[0]=="systemctl" and args[1]=="daemon-reload":return ""
+                if args[0]=="systemctl":return SimpleNamespace(returncode=1)
+                if args[:4]==("ip","-4","rule","show"):
+                    return "0: from all lookup local\n"
+                if args[:4]==("nft","list","table","ip"):
+                    return SimpleNamespace(returncode=1)
+                raise AssertionError(args)
+            original_path=installer.Path
+            def remap(arg):
+                if str(arg)=="/etc/systemd/system":return units
+                return original_path(arg)
+            with patch.object(installer,"BASE",base),\
+                 patch.object(installer,"Path",side_effect=remap),\
+                 patch.object(installer,"command",side_effect=mock_command),\
+                 patch.object(installer,"read_state",return_value={
+                     "role":"peer","version":1,"phase":"restored"}),\
+                 patch.object(installer,"address_exists",return_value=False):
+                result=installer.reset_restored("peer")
+            self.assertEqual(result["status"],"reset_to_prepared_state")
+            self.assertFalse(base.exists())
+            self.assertTrue(original_path(result["archived_state"]).is_dir())
+            self.assertFalse((units/"cerato-routed-rollback-peer.timer").exists())
+
     def test_no_automatic_live_change_on_import(self):
         self.assertTrue(callable(installer.prepare))
         self.assertTrue(callable(installer.activate))
