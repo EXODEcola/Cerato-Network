@@ -6,7 +6,7 @@ inattendu. Ils n'utilisent pas OVHcloud API : attendre la confirmation définiti
 de suppression de la MAC virtuelle et sa propagation.
 
 Les scripts sont épinglés à ce commit de développement :
-`823dee5bc90bd48ae31a1471ff17eeb26685b0d2`.
+`5bc35c7db8a8844c2e05e61d58aa071591327f8b`.
 Garder deux consoles SSH séparées, OVH `51.210.223.57` et Dell via Tailscale
 `100.74.84.71`. Ne pas redémarrer pendant l'activation.
 
@@ -44,7 +44,7 @@ immuable du commit, avec HTTPS et arrêt immédiat en cas d'échec.
 Cette opération **n'active pas le réseau** :
 
 ```bash
-REV=823dee5bc90bd48ae31a1471ff17eeb26685b0d2
+REV=5bc35c7db8a8844c2e05e61d58aa071591327f8b
 curl --fail --location --show-error --silent \
   "https://raw.githubusercontent.com/EXODEcola/Cerato-Network/$REV/scripts/managed_routed_cutover.py" \
   --output /tmp/cerato-routed-cutover.py
@@ -69,7 +69,7 @@ commencer les étapes d'activation.
 set -euo pipefail
 cd ~/Cerato-Network-preflight
 git fetch origin feature/public-ip-path-preflight
-REV=823dee5bc90bd48ae31a1471ff17eeb26685b0d2
+REV=5bc35c7db8a8844c2e05e61d58aa071591327f8b
 git cat-file -e "$REV^{commit}"
 git show "$REV:scripts/managed_routed_cutover.py" | sudo tee /usr/local/sbin/cerato-routed-cutover >/dev/null
 sudo chmod 755 /usr/local/sbin/cerato-routed-cutover
@@ -87,7 +87,7 @@ explicitement publiés. Le LAN, Tailscale et l'IPv6 ne sont pas modifiés.
 set -euo pipefail
 cd ~/Cerato-Network
 git fetch origin feature/public-ip-path-preflight
-REV=823dee5bc90bd48ae31a1471ff17eeb26685b0d2
+REV=5bc35c7db8a8844c2e05e61d58aa071591327f8b
 git cat-file -e "$REV^{commit}"
 SUPPORT="$(sudo mktemp -d /root/cerato-routed-support.XXXXXXXX)"
 for f in live_routed_compat.py routed_nft_inject.py routed_firewall.py; do
