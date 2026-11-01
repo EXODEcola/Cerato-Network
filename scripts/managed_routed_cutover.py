@@ -220,8 +220,10 @@ def stage_controller():
     stage=BASE/"patched"
     stage.mkdir(mode=0o700,exist_ok=False)
     patched=transform(raw)
-    ensure(hashlib.sha256(patched).hexdigest()==PATCHED_SHA,
-           "Transformateur AST non conforme à la copie RISE-1 validée")
+    shebang=b"#!/usr/bin/env python3\n"
+    ensure(patched.startswith(shebang) and
+           hashlib.sha256(patched[len(shebang):]).hexdigest()==PATCHED_SHA,
+           "Transformateur AST ou en-tête Python non conforme à la copie RISE-1 validée")
     atomic(stage/"ceratoctl",patched)
     helpers=BASE/"support"
     for src,dst in (("live_routed_compat.py","cerato_routed_support.py"),
@@ -403,6 +405,8 @@ def activate(role):
             for filename in EXPECTED_SUPPORT:
                 atomic(CONTROLLER.parent/filename,(BASE/"patched"/filename).read_bytes())
             patched=(BASE/"patched"/"ceratoctl").read_bytes()
+            ensure(patched.startswith(b"#!/usr/bin/env python3\n"),
+                   "Contrôleur sans interpréteur Python : installation refusée")
             atomic(CONTROLLER,patched,0o755)
             atomic(CFG,(BASE/"config.routed").read_bytes())
             atomic(STATE,(BASE/"managed.routed").read_bytes())
