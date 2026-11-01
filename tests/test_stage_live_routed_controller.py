@@ -86,6 +86,7 @@ class StagingTests(unittest.TestCase):
     def test_transform_does_not_evaluate_live_script(self):
         raw=SYNTHETIC.encode()
         output=stage.transform(raw)
+        self.assertTrue(output.startswith(b"#!/usr/bin/env python3\n"))
         self.assertIn(b"routed_render_nft",output)
         self.assertIn(b"routed_extend_wg",output)
         self.assertIn(b"from cerato_routed_support import",output)
