@@ -6,7 +6,7 @@ inattendu. Ils n'utilisent pas OVHcloud API : attendre la confirmation définiti
 de suppression de la MAC virtuelle et sa propagation.
 
 Les scripts sont épinglés à ce commit de développement :
-`5bc35c7db8a8844c2e05e61d58aa071591327f8b`.
+`0a7a4f43829d7659667310fffc6b6063f09a7466`.
 Garder deux consoles SSH séparées, OVH `51.210.223.57` et Dell via Tailscale
 `100.74.84.71`. Ne pas redémarrer pendant l'activation.
 
@@ -44,7 +44,7 @@ immuable du commit, avec HTTPS et arrêt immédiat en cas d'échec.
 Cette opération **n'active pas le réseau** :
 
 ```bash
-REV=5bc35c7db8a8844c2e05e61d58aa071591327f8b
+REV=0a7a4f43829d7659667310fffc6b6063f09a7466
 curl --fail --location --show-error --silent \
   "https://raw.githubusercontent.com/EXODEcola/Cerato-Network/$REV/scripts/managed_routed_cutover.py" \
   --output /tmp/cerato-routed-cutover.py
@@ -69,7 +69,7 @@ commencer les étapes d'activation.
 set -euo pipefail
 cd ~/Cerato-Network-preflight
 git fetch origin feature/public-ip-path-preflight
-REV=5bc35c7db8a8844c2e05e61d58aa071591327f8b
+REV=0a7a4f43829d7659667310fffc6b6063f09a7466
 git cat-file -e "$REV^{commit}"
 git show "$REV:scripts/managed_routed_cutover.py" | sudo tee /usr/local/sbin/cerato-routed-cutover >/dev/null
 sudo chmod 755 /usr/local/sbin/cerato-routed-cutover
@@ -81,13 +81,36 @@ Timer de retour arrière Dell : **45 minutes**. Le profil de firewall
 autorise SSH TCP 22 sur la /32, puis bloque les autres ports non
 explicitement publiés. Le LAN, Tailscale et l'IPv6 ne sont pas modifiés.
 
+## Récupération d'une préparation orpheline sur OVH
+
+Le 1er novembre 2026, le nouveau `prepare --role gateway` a refusé
+`Préparation existante : statut/rollback avant nouvel essai`.
+La vérification précédente avait confirmé l'absence de `state.json`
+et l'Additional IPv4 encore sur `enp1s0f0`. Il s'agit donc
+possiblement d'un dossier de préparation ancien ou interrompu, pas d'un
+routage activé par le bloc qui a échoué.
+
+Dans la version du script référencée ci-dessus, une commande
+**`recover-orphan --role gateway`** a été ajoutée pour ce cas strict.
+Elle refuse si `state.json` existe, si un watchdog existe ou fonctionne,
+si les sauvegardes ne correspondent pas aux fichiers live, si
+WireGuard route déjà la /32, ou si le contrôleur/DNAT d'origine diffère.
+Elle archive le dossier mais **ne modifie pas le réseau**. Appeler
+cette commande avant `prepare --role gateway`, uniquement si
+une ancienne préparation sans état bloque l'opération.
+
+Le Dell est actuellement activé en essai : le watchdog du Dell est
+programmé à **2026-11-01T11:52:22Z (12:52:22 Paris)**. Si ce délai
+est dépassé, le rollback aura restauré l'état initial : **ne pas
+activer OVH vers un Dell qui ne possède plus la /32**.
+
 ## 2. OVH — convertir Cerato, WireGuard et la route
 
 ```bash
 set -euo pipefail
 cd ~/Cerato-Network
 git fetch origin feature/public-ip-path-preflight
-REV=5bc35c7db8a8844c2e05e61d58aa071591327f8b
+REV=0a7a4f43829d7659667310fffc6b6063f09a7466
 git cat-file -e "$REV^{commit}"
 SUPPORT="$(sudo mktemp -d /root/cerato-routed-support.XXXXXXXX)"
 for f in live_routed_compat.py routed_nft_inject.py routed_firewall.py; do
