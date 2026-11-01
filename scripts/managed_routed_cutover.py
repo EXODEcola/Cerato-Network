@@ -437,6 +437,51 @@ def rollback(role):
     return {"status":info["phase"],"role":role,
             "rollback_errors":errors}
 
+def reset_restored(role):
+    """Archive a completed rollback and remove stale watchdog units safely.
+
+    A previously rolled-back Dell has an intentionally retained state.json;
+    without this explicit action a second prepare always fails. Never reset
+    a still-armed or partially failed migration.
+    """
+    info=read_state(role)
+    ensure(info["phase"]=="restored", "Seule une migration restaurée peut être réinitialisée")
+    name=timer_name(role)
+    ensure(command("systemctl","is-active","--quiet",name+".timer",
+                   check=False).returncode!=0,
+           "Watchdog encore actif : réinitialisation refusée")
+    ensure(command("systemctl","is-enabled","--quiet",
+                   UNIT+"-"+role+".service",check=False).returncode!=0,
+           "Service persistant actif : réinitialisation refusée")
+    if role=="peer":
+        ensure(not address_exists(PUB,WG),"L'IPv4 est encore sur le Dell")
+        rule=command("ip","-4","rule","show")
+        ensure(not re.search(r"(?m)^\\s*"+str(RULE_PRIORITY)+r":",rule),
+               "Une règle de priorité 1101 existe encore")
+        ensure(command("nft","list","table","ip",FW_TABLE,
+                       check=False).returncode!=0,
+               "Pare-feu temporaire encore présent")
+    else:
+        ensure(address_exists(PUB,WAN),"Alias WAN non restauré")
+        ensure(not route_public_to_wg(),"Route publique WG encore active")
+        ensure(hashlib.sha256(CONTROLLER.read_bytes()).hexdigest()==SOURCE_SHA,
+               "Contrôleur live non restauré")
+    # Archive snapshots rather than deleting recovery evidence.
+    stamp=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    archive=BASE.with_name(BASE.name+"-restored-"+stamp)
+    ensure(not archive.exists(),"Archive déjà existante")
+    BASE.rename(archive)
+    # Expired timer files must be removed or the next prepare will refuse.
+    directory=Path("/etc/systemd/system")
+    for suffix in (".timer",".service"):
+        unit=directory/(name+suffix)
+        if unit.is_file() and not unit.is_symlink():
+            unit.unlink()
+    command("systemctl","daemon-reload")
+    return {"status":"reset_to_prepared_state","role":role,
+            "archived_state":str(archive),"network_modified":False}
+
+
 def persist(role):
     info=read_state(role)
     ensure(info["phase"]=="active" and remaining_seconds(info)>240,
@@ -511,7 +556,7 @@ def restore(role):
 
 def main():
     parser=argparse.ArgumentParser(description="Cerato routed Additional IPv4 atomic cutover")
-    parser.add_argument("action",choices=("prepare","activate","persist","rollback","restore","status"))
+    parser.add_argument("action",choices=("prepare","activate","persist","rollback","restore","reset","status"))
     parser.add_argument("--role",choices=("peer","gateway"),required=True)
     parser.add_argument("--support-dir",default=".")
     opt=parser.parse_args()
@@ -522,6 +567,7 @@ def main():
         elif opt.action=="persist":report=persist(opt.role)
         elif opt.action=="rollback":report=rollback(opt.role)
         elif opt.action=="restore":report=restore(opt.role)
+        elif opt.action=="reset":report=reset_restored(opt.role)
         else:report=read_state(opt.role)
         print(json.dumps(report,indent=2,ensure_ascii=False))
     except (CutoverError,ValueError,TypeError,KeyError,OSError) as exc:
