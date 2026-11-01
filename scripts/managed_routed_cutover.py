@@ -509,7 +509,7 @@ def recover_orphan_preparation(role):
            "Modules réseau live déjà modifiés : refus")
     wan_rules=command("nft","list","chain","ip","cerato_network","prerouting")
     ensure(re.search(r"(?m)ip daddr "+re.escape(PUB)+
-                     r" tcp dport 8080 dnat to "+re.escape(VPN)+r":8080\\b",
+                     r" tcp dport 8080 dnat to "+re.escape(VPN)+r":8080\b",
                      wan_rules) is not None,
            "DNAT historique absent, état réseau inattendu")
     stamp=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
