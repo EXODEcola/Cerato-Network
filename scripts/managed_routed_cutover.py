@@ -59,6 +59,7 @@ UNIT="cerato-routed"
 DEADLINE_GATEWAY=25
 DEADLINE_PEER=45
 EXPECTED_SUPPORT=("cerato_routed_support.py","routed_nft_inject.py","routed_firewall.py")
+INPUT_SUPPORT=("live_routed_compat.py","routed_nft_inject.py","routed_firewall.py")
 
 class CutoverError(RuntimeError):
     pass
@@ -301,7 +302,7 @@ def prepare(role,support_dir):
             manifest["wg_allowed_before"]=wg_allowed(peer["pubkey"])
             dst=BASE/"support"
             dst.mkdir(mode=0o700)
-            for item in (*EXPECTED_SUPPORT,"stage_live_routed_controller.py"):
+            for item in (*INPUT_SUPPORT,"stage_live_routed_controller.py"):
                 src=Path(support_dir)/item
                 ensure(src.is_file() and not src.is_symlink(),"Module de déploiement absent")
                 contents=src.read_bytes()
