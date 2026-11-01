@@ -460,6 +460,67 @@ def rollback(role):
     return {"status":info["phase"],"role":role,
             "rollback_errors":errors}
 
+def recover_orphan_preparation(role):
+    """Archive an interrupted PREPARE, never a staged/active/committed cutover.
+
+    A historical preparer may have created BASE before failing and before
+    writing state.json. Fail closed if network, services or snapshots differ
+    from the known local-NAT baseline. No kernel networking mutations.
+    """
+    ensure(role=="gateway", "Récupération d'orphelin réservée à OVH")
+    ensure(BASE.is_dir() and not BASE.is_symlink(),
+           "Aucun dossier orphelin sûr à récupérer")
+    ensure(not status_path().exists() and not status_path().is_symlink(),
+           "État de migration présent : utiliser status/rollback")
+    expected_files={"ceratoctl.before","config.before","managed.before",
+                    "nft.before","nft.routed","config.routed","managed.routed"}
+    expected_dirs={"support","patched"}
+    for item in BASE.iterdir():
+        ensure(not item.is_symlink() and
+               ((item.name in expected_files and item.is_file()) or
+                (item.name in expected_dirs and item.is_dir())),
+               "Dossier de migration inconnu : récupération refusée")
+    name=timer_name(role)
+    unit_dir=Path("/etc/systemd/system")
+    ensure(all(not (unit_dir/(name+suffix)).exists()
+               and not (unit_dir/(name+suffix)).is_symlink()
+               for suffix in (".timer",".service")),
+           "Unités watchdog présentes : récupération refusée")
+    ensure(command("systemctl","is-active","--quiet",
+                   name+".timer",check=False).returncode!=0,
+           "Watchdog encore actif : récupération refusée")
+    ensure(command("systemctl","is-active","--quiet",
+                   name+".service",check=False).returncode!=0,
+           "Rollback systemd en cours : récupération refusée")
+    # Revalidate known pre-cutover state before touching the directory.
+    gateway_preflight()
+    ensure(PUB+"/32" not in wg_allowed(wg_peer()[1]["pubkey"]),
+           "WireGuard autorise déjà la /32 publique")
+    for path,filename in ((CONTROLLER,"ceratoctl.before"),
+                          (CFG,"config.before"),(STATE,"managed.before")):
+        snap=BASE/filename
+        if snap.exists() or snap.is_symlink():
+            ensure(snap.is_file() and not snap.is_symlink()
+                   and hashlib.sha256(snap.read_bytes()).digest()==
+                       hashlib.sha256(path.read_bytes()).digest(),
+                   "Fichier live différent de la sauvegarde : refus")
+    ensure(all(not (CONTROLLER.parent/item).exists()
+               for item in EXPECTED_SUPPORT),
+           "Modules réseau live déjà modifiés : refus")
+    wan_rules=command("nft","list","chain","ip","cerato_network","prerouting")
+    ensure(re.search(r"(?m)ip daddr "+re.escape(PUB)+
+                     r" tcp dport 8080 dnat to "+re.escape(VPN)+r":8080\\b",
+                     wan_rules) is not None,
+           "DNAT historique absent, état réseau inattendu")
+    stamp=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    archive=BASE.with_name(BASE.name+"-orphan-"+stamp)
+    ensure(not archive.exists(),"Archive orpheline déjà existante")
+    BASE.rename(archive)
+    return {"status":"orphan_archived","role":role,
+            "archive":str(archive),"network_modified":False,
+            "watchdogs_modified":False}
+
+
 def reset_restored(role):
     """Archive a completed rollback and remove stale watchdog units safely.
 
@@ -579,7 +640,7 @@ def restore(role):
 
 def main():
     parser=argparse.ArgumentParser(description="Cerato routed Additional IPv4 atomic cutover")
-    parser.add_argument("action",choices=("prepare","activate","persist","rollback","restore","reset","status"))
+    parser.add_argument("action",choices=("prepare","activate","persist","rollback","restore","reset","recover-orphan","status"))
     parser.add_argument("--role",choices=("peer","gateway"),required=True)
     parser.add_argument("--support-dir",default=".")
     opt=parser.parse_args()
@@ -591,6 +652,7 @@ def main():
         elif opt.action=="rollback":report=rollback(opt.role)
         elif opt.action=="restore":report=restore(opt.role)
         elif opt.action=="reset":report=reset_restored(opt.role)
+        elif opt.action=="recover-orphan":report=recover_orphan_preparation(opt.role)
         else:report=read_state(opt.role)
         print(json.dumps(report,indent=2,ensure_ascii=False))
     except (CutoverError,ValueError,TypeError,KeyError,OSError) as exc:
