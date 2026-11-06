@@ -63,6 +63,70 @@ class Handler:
         self.assertEqual(result["handlers"][0]["nat_branches"],[])
         self.assertNotIn("password-reset-token",json.dumps(result))
 
+    def test_one_line_post_delegates_to_protected_method(self):
+        source="""SECRET = 'no-log-secret'
+class Server:
+    def do_POST(self): return self.dispatch()
+    def dispatch(self):
+        p=self.path
+        if not self.check_session(write=True):return
+        b=self.read_body()
+        if p == '/api/nat/add':
+            return self.apply_nat(b)
+"""
+        report=probe.analyze(source)
+        self.assertFalse(report["nat_add_direct_branch_found"])
+        self.assertTrue(report["nat_add_reachable_branch_found"])
+        self.assertTrue(report["nat_add_literal_reachable"])
+        handler=report["handlers"][0]
+        self.assertTrue(handler["post_is_one_line"])
+        self.assertTrue(handler["delegation_detected"])
+        self.assertEqual(handler["reachable_delegate_count"],1)
+        self.assertEqual(handler["nat_branches"],[])
+        branches=handler["reachable_nat_branches"]
+        self.assertEqual(len(branches),1)
+        self.assertEqual(branches[0]["origin"],"method")
+        self.assertTrue(branches[0]["before_branch_write_auth_present"])
+        self.assertEqual(branches[0]["before_branch_body_read"],"b")
+        self.assertNotIn("no-log-secret",json.dumps(report))
+
+    def test_one_line_post_delegates_to_module_helper(self):
+        source="""def route_post(handler):
+    p=handler.path
+    if p == '/api/nat/add':
+        return None
+class Server:
+    def do_POST(self): return route_post(self)
+"""
+        report=probe.analyze(source)
+        self.assertTrue(report["nat_add_reachable_branch_found"])
+        self.assertEqual(report["handlers"][0]["reachable_nat_branches"][0]["origin"],
+                         "module")
+        self.assertFalse(report["handlers"][0]["reachable_nat_branches"][0][
+            "before_branch_write_auth_present"])
+
+    def test_dynamic_dispatch_is_not_reported_as_verified(self):
+        source="""class Server:
+    def do_POST(self): return getattr(self, 'dynamic')()
+"""
+        report=probe.analyze(source)
+        self.assertFalse(report["nat_add_reachable_branch_found"])
+        self.assertEqual(report["handlers"][0]["reachable_delegate_count"],0)
+        self.assertFalse(report["handlers"][0]["delegation_detected"])
+
+    def test_membership_delegate_is_detected_but_not_approved(self):
+        source="""class Server:
+    def do_POST(self): return self.dispatch()
+    def dispatch(self):
+        if p in ('/api/nat/add', '/api/nat/remove'):
+            return 'bad'
+"""
+        report=probe.analyze(source)
+        self.assertFalse(report["nat_add_reachable_branch_found"])
+        self.assertTrue(report["nat_add_literal_reachable"])
+        self.assertEqual(report["handlers"][0]["reachable_nat_branches"][0]["syntax"],
+                         "noncanonical-expression")
+
     def test_readonly_file_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             backend=Path(tmp)/"server.py"
