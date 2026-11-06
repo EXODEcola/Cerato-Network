@@ -137,60 +137,179 @@ def _inline_model(model: str) -> str:
         raise LiveUIError("Résumé d'attribution non reconnu")
     return content
 
+LIVE_BACKEND_SHA256="9c7087a1eeca7e3c8a4462c2cd8e6659e4d692409771117c575cd00b46b30360"
+LIVE_FRONTEND_SHA256="cfadd7e7f05cc80c0f4c66c313634f8a4dd8a59549cbcbea1615437c3758aa4b"
+
+
+def _is_branch(node,route):
+    if not isinstance(node,ast.If):
+        return False
+    comp=node.test
+    return (
+        isinstance(comp,ast.Compare)
+        and isinstance(comp.left,ast.Name) and comp.left.id=="p"
+        and len(comp.ops)==1 and isinstance(comp.ops[0],ast.Eq)
+        and len(comp.comparators)==1
+        and isinstance(comp.comparators[0],ast.Constant)
+        and comp.comparators[0].value==route
+    )
+
+
+def _guard(node,write):
+    if not isinstance(node,ast.If):
+        return False
+    test=node.test
+    if not (isinstance(test,ast.UnaryOp) and isinstance(test.op,ast.Not)
+            and isinstance(test.operand,ast.Call)):
+        return False
+    call=test.operand
+    if not (isinstance(call.func,ast.Attribute)
+            and isinstance(call.func.value,ast.Name)
+            and call.func.value.id=="self"
+            and call.func.attr=="check_session"):
+        return False
+    if (len(call.keywords)!=1 if write else len(call.keywords)!=0):
+        return False
+    if write and not any(k.arg=="write" and isinstance(k.value,ast.Constant)
+                         and k.value.value is True for k in call.keywords):
+        return False
+    return bool(node.body and isinstance(node.body[0],(ast.Return,ast.Raise)))
+
+
+def _body_read(node):
+    if not isinstance(node,ast.Assign) or len(node.targets)!=1:
+        return False
+    target=node.targets[0]
+    call=node.value
+    return (isinstance(target,ast.Name) and target.id=="b"
+            and isinstance(call,ast.Call)
+            and isinstance(call.func,ast.Attribute)
+            and isinstance(call.func.value,ast.Name)
+            and call.func.value.id=="self"
+            and call.func.attr=="read_body")
+
+
+def _reachable_method_nodes(cls,root):
+    methods={n.name:n for n in cls.body if isinstance(n,ast.FunctionDef)}
+    if root not in methods:
+        return set()
+    stack=[root]
+    reached=set()
+    while stack:
+        name=stack.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        if len(reached)>64:
+            raise LiveUIError("Délégation du handler trop large")
+        for child in ast.walk(methods[name]):
+            if (isinstance(child,ast.Call)
+                    and isinstance(child.func,ast.Attribute)
+                    and isinstance(child.func.value,ast.Name)
+                    and child.func.value.id=="self"
+                    and child.func.attr in methods):
+                stack.append(child.func.attr)
+    return reached
+
+
+def _find_protected_branch(source,tree,verb,route,*,write):
+    """Only a top-level branch in a reachable helper with a dominating auth gate.
+
+    We intentionally refuse an unrecognized nested authorization flow.
+    This is a static gate, never proof of runtime session or CSRF safety.
+    """
+    found=[]
+    for cls in (n for n in ast.walk(tree) if isinstance(n,ast.ClassDef)):
+        reachable=_reachable_method_nodes(cls,"do_"+verb)
+        for method in cls.body:
+            if not isinstance(method,ast.FunctionDef) or method.name not in reachable:
+                continue
+            statements=method.body
+            matches=[n for n in ast.walk(method) if _is_branch(n,route)]
+            for branch in matches:
+                def contains(outer,inner):
+                    return any(child is inner for child in ast.walk(outer))
+                roots=[(idx,node) for idx,node in enumerate(statements)
+                       if contains(node,branch)]
+                if len(roots)!=1:
+                    raise LiveUIError("Arbre des branches HTTP ambigu")
+                index,root=roots[0]
+                # A top-level if/elif chain is allowed. A nested conditional,
+                # try, loop or match inside the route's parent is rejected.
+                if not isinstance(root,ast.If):
+                    raise LiveUIError("Branche API NAT imbriquée non reconnue")
+                chain=root
+                while chain is not branch and len(chain.orelse)==1 and isinstance(chain.orelse[0],ast.If):
+                    chain=chain.orelse[0]
+                if chain is not branch:
+                    raise LiveUIError("Branche HTTP non directement accessible")
+                guards=[n for n in statements[:index] if _guard(n,write)]
+                if len(guards)!=1:
+                    raise LiveUIError("Garde d'authentification avant route absent ou ambigu")
+                if write and len([n for n in statements[:index] if _body_read(n)])!=1:
+                    raise LiveUIError("Lecture du formulaire avant route absente ou ambiguë")
+                if branch.end_lineno is None or not branch.body or (
+                    branch.body[0].lineno<=branch.lineno
+                ):
+                    raise LiveUIError("Branche HTTP compacte non patchable")
+                found.append(branch)
+    if len(found)!=1:
+        raise LiveUIError("Branche HTTP authentifiée introuvable ou dupliquée : "+route)
+    return found[0]
+
+
+def _inject_after_branch_line(source,branch,guard_call):
+    lines=source.splitlines(keepends=True)
+    line=lines[branch.lineno-1]
+    if (branch.col_offset<0 or branch.col_offset>32
+            or not line.startswith(" "*branch.col_offset)
+            or "\n" not in line
+            or not re.match(r"^\s*(?:if|elif)\s+p\s*==\s*(['\"])(/api/[a-z/]+)\1\s*:\s*$",
+                            line.rstrip("\r\n"))):
+        raise LiveUIError("Syntaxe physique du handler HTTP inattendue")
+    indent=" "*(branch.col_offset+4)
+    lines.insert(branch.lineno,indent+guard_call+"\n")
+    return "".join(lines)
+
+
 def patch_backend(source: str, model: str) -> str:
     if (source.count("def additional_ipctl(")!=1 or
             source.count("def netstate():")!=1 or
             "def cerato_routed_allocations(" in source):
         raise LiveUIError("Backend Additional IPv4 incompatible ou déjà corrigé")
-    if "if not self.check_session" not in source or "write=True" not in source:
-        raise LiveUIError("Protections d'authentification live non retrouvées")
-    if "b=self.read_body()" not in source and "b = self.read_body()" not in source:
-        raise LiveUIError("Lecture du formulaire live non reconnue")
-    status_pat=re.compile(
-        r"^(?P<indent> {8,24})if p=='/api/status': return self\.send_json\(200,netstate\(\)\)[ \t]*$",
-        re.M)
-    status=list(status_pat.finditer(source))
-    if len(status)!=1:
-        raise LiveUIError("Handler GET status live introuvable")
-    # Ensure the inserted read-only API is behind the same session check as
-    # GET /api/status, not merely that a check exists elsewhere in the file.
-    get_head=source.rfind("    def do_GET(self):",0,status[0].start())
-    get_tail=source.rfind("    def do_POST(self):",0,status[0].start())
-    if get_head<0 or get_tail>get_head:
-        raise LiveUIError("Handler GET authentifié non vérifiable")
-    get_prefix=source[get_head:status[0].start()]
-    if not re.search(r"if not self\.check_session\(\):",get_prefix):
-        raise LiveUIError("Protection de session avant GET status non vérifiable")
-    get=status[0].group(0)
-    indent=status[0].group("indent")
-    new_get=indent+"if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n"+get
-    source=source.replace(get,new_get,1)
-    # Match exactly ONE NAT handler; do not guess API changes.
-    # The real RISE-1 NAT route may use whitespace, double quotes, or
-    # "elif" instead of the original single-quoted "if". Accept only an
-    # exact, standalone p == '/api/nat/add' (or '/api/nat') branch.
-    # A compound/membership/dynamic route still fails closed.
-    natpat=re.compile(
-        r"""^(?P<indent> {8,24})(?:if|elif)\s+p\s*==\s*(?P<quote>['"])/api/nat(?:/add)?(?P=quote)\s*:[ \t]*$""",
-        re.M)
-    matches=list(natpat.finditer(source))
-    if len(matches)!=1:
-        raise LiveUIError("Handler NAT live absent ou ambigu")
-    post_head=source.rfind("    def do_POST(self):",0,matches[0].start())
-    if post_head<0 or not re.search(
-            r"if not self\.check_session\(write=True\)",source[post_head:matches[0].start()]):
-        raise LiveUIError("Protection CSRF/compte avant POST NAT non vérifiable")
-    nat=matches[0].group(0)
-    nat_indent=matches[0].group("indent")
-    next_line=nat_indent+'    cerato_reject_routed_nat(b.get("public_ip") or b.get("ip"))'
-    source=source.replace(nat,nat+"\n"+next_line,1)
-    # Never inject in a branch with arbitrary first statements or before auth
-    # if the real AST / syntax does not validate.
+    original=ast.parse(source)
+    nat=_find_protected_branch(source,original,"POST","/api/nat/add",write=True)
+    # The removed route is NOT changed: keep existing NAT unpublish semantics.
+    remove=_find_protected_branch(source,original,"POST","/api/nat/remove",write=True)
+    get=_find_protected_branch(source,original,"GET","/api/status",write=False)
+    if nat.lineno==remove.lineno or get.lineno==nat.lineno:
+        raise LiveUIError("Dispatch API incompatible")
+    # Inject from bottom upwards to preserve original source line positions.
+    inserts=sorted([(nat,'cerato_reject_routed_nat(b.get("public_ip") or b.get("ip"))'),
+                    (get,'return self.send_json(200,cerato_routed_allocations()) if p=="/api/ip/allocations" else None')],
+                   key=lambda pair:pair[0].lineno,reverse=True)
+    for branch,call in inserts:
+        if branch is get:
+            # Insert a new sibling branch *before* the existing /api/status
+            # route, not inside it, so /api/ip/allocations is reachable.
+            lines=source.splitlines(keepends=True)
+            original_line=lines[branch.lineno-1]
+            indent=" "*branch.col_offset
+            lines.insert(branch.lineno-1,
+                         indent+"if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n")
+            source="".join(lines)
+        else:
+            source=_inject_after_branch_line(source,branch,call)
     anchor="def netstate():"
     injected=_inline_model(model)+"\n"+BACKEND_HELPERS+"\n"
+    if source.count(anchor)!=1:
+        raise LiveUIError("Point d'insertion de la lecture réseau ambigu")
     source=source.replace(anchor,injected+anchor,1)
     ast.parse(source)
+    if source.count("cerato_reject_routed_nat(b.get")!=1 or source.count("'/api/ip/allocations'")!=1:
+        raise LiveUIError("Injection Web incohérente")
     return source
+
 
 def patch_frontend(source: str) -> str:
     render_anchor="function render(){if(!live)return;"
@@ -218,6 +337,11 @@ def stage(source: Path,destination: Path,model: Path):
         raise LiveUIError("Fichiers source absents ou symboliques")
     if backend.stat().st_size>300_000 or frontend.stat().st_size>300_000:
         raise LiveUIError("Source Web de taille inattendue")
+    import hashlib
+    if hashlib.sha256(backend.read_bytes()).hexdigest()!=LIVE_BACKEND_SHA256:
+        raise LiveUIError("Empreinte du backend OVH non reconnue : staging interdit")
+    if hashlib.sha256(frontend.read_bytes()).hexdigest()!=LIVE_FRONTEND_SHA256:
+        raise LiveUIError("Empreinte du frontend OVH non reconnue : staging interdit")
     code=patch_backend(backend.read_text(encoding="utf8"),model.read_text(encoding="utf8"))
     ui=patch_frontend(frontend.read_text(encoding="utf8"))
     with tempfile.TemporaryDirectory(prefix="cerato-ui-verify-") as temp:
