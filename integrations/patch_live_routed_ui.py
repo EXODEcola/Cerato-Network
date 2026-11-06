@@ -249,7 +249,7 @@ def _find_protected_branch(source,tree,verb,route,*,write):
                 if write and len([n for n in statements[:index] if _body_read(n)])!=1:
                     raise LiveUIError("Lecture du formulaire avant route absente ou ambiguë")
                 if branch.end_lineno is None or not branch.body or (
-                    branch.body[0].lineno<=branch.lineno
+                    write and branch.body[0].lineno<=branch.lineno
                 ):
                     raise LiveUIError("Branche HTTP compacte non patchable")
                 found.append(branch)
@@ -328,7 +328,9 @@ def patch_frontend(source: str) -> str:
     updated=source.replace(render_anchor,JS_OVERLAY+"\n"+instrument,1)
     return updated
 
-def stage(source: Path,destination: Path,model: Path):
+def stage(source: Path,destination: Path,model: Path,*,
+          expected_backend_sha=LIVE_BACKEND_SHA256,
+          expected_frontend_sha=LIVE_FRONTEND_SHA256):
     if source.resolve()==destination.resolve() or destination.exists():
         raise LiveUIError("Staging doit être distinct et absent")
     backend=source/"backend/server.py"
@@ -338,9 +340,9 @@ def stage(source: Path,destination: Path,model: Path):
     if backend.stat().st_size>300_000 or frontend.stat().st_size>300_000:
         raise LiveUIError("Source Web de taille inattendue")
     import hashlib
-    if hashlib.sha256(backend.read_bytes()).hexdigest()!=LIVE_BACKEND_SHA256:
+    if hashlib.sha256(backend.read_bytes()).hexdigest()!=expected_backend_sha:
         raise LiveUIError("Empreinte du backend OVH non reconnue : staging interdit")
-    if hashlib.sha256(frontend.read_bytes()).hexdigest()!=LIVE_FRONTEND_SHA256:
+    if hashlib.sha256(frontend.read_bytes()).hexdigest()!=expected_frontend_sha:
         raise LiveUIError("Empreinte du frontend OVH non reconnue : staging interdit")
     code=patch_backend(backend.read_text(encoding="utf8"),model.read_text(encoding="utf8"))
     ui=patch_frontend(frontend.read_text(encoding="utf8"))
