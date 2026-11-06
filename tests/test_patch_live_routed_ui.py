@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -125,6 +126,43 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(LiveUIError,"NAT"):
             patch_backend(altered,self.model)
 
+    def test_unrecognized_production_hashes_fail_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)
+            source=folder/"live"
+            (source/"backend").mkdir(parents=True)
+            (source/"web").mkdir(parents=True)
+            (source/"backend/server.py").write_text(SERVER)
+            (source/"web/app.js").write_text(FRONT)
+            model=folder/"model.py"
+            model.write_text(self.model)
+            with self.assertRaisesRegex(LiveUIError,"Empreinte"):
+                stage(source,folder/"candidate",model)
+            self.assertFalse((folder/"candidate").exists())
+
+    def test_delegate_handler_uses_safe_branch_before_nat_call(self):
+        delegated=SERVER.replace(
+            "    def do_POST(self):\\n        p='/api/nat/add'\\n",
+            "    def do_POST(self): return self._handle_post()\\n"
+            "    def _handle_post(self):\\n        p='/api/nat/add'\\n"
+        ).replace(
+            "    def do_GET(self):\\n        p='/api/status'\\n",
+            "    def do_GET(self): return self._handle_get()\\n"
+            "    def _handle_get(self):\\n        p='/api/status'\\n"
+        )
+        patched=patch_backend(delegated,self.model)
+        self.assertIn("cerato_reject_routed_nat(b.get",patched)
+        self.assertIn("if p=='/api/ip/allocations'",patched)
+        self.assertEqual(patched.count("cerato_reject_routed_nat(b.get"),1)
+        self.assertLess(patched.index("cerato_reject_routed_nat(b.get"),
+                        patched.index("ctl('nat-add',ip)"))
+
+    def test_reject_guard_if_buried_inside_conditional(self):
+        broken=SERVER.replace("        if not self.check_session(write=True):return",
+           "        if False:\\n            if not self.check_session(write=True):return".replace("\\\\n","\\n"))
+        with self.assertRaises(LiveUIError):
+            patch_backend(broken,self.model)
+
     def test_staging_only_creates_two_output_files(self):
         with tempfile.TemporaryDirectory() as d:
             folder=Path(d)
@@ -136,7 +174,9 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
             model=folder/"model.py"
             model.write_text(self.model)
             target=folder/"candidate"
-            report=stage(source,target,model)
+            report=stage(source,target,model,
+                expected_backend_sha=hashlib.sha256(SERVER.encode()).hexdigest(),
+                expected_frontend_sha=hashlib.sha256(FRONT.encode()).hexdigest())
             self.assertEqual(report["status"],"staged-only")
             self.assertFalse(report["network_modified"])
             self.assertFalse(report["production_modified"])
