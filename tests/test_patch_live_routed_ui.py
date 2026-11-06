@@ -34,6 +34,8 @@ class Handler:
         if p=='/api/nat/add':
             ip=b.get('ip')
             ctl('nat-add',ip)
+        elif p=='/api/nat/remove':
+            ctl('nat-remove',b)
         if p=='/api/peers':
             return self.send_json(200,{})
 """
@@ -80,7 +82,9 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
 
     def test_backend_accepts_exact_double_quoted_post_nat_branch(self):
         modified=SERVER.replace("if p=='/api/nat/add':",
-                                'elif p == "/api/nat/add":')
+                                'if p == "/api/nat/ping":\n'
+                                '            pass\n'
+                                '        elif p == "/api/nat/add":')
         patch=patch_backend(modified,self.model)
         self.assertIn('elif p == "/api/nat/add":\n'
                       '            cerato_reject_routed_nat',patch)
@@ -123,7 +127,7 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
     def test_refuse_unknown_backend_mutation_shape(self):
         altered=SERVER.replace("if p=='/api/nat/add':",
                                "if p in ('/api/nat/add','/api/nat'):")
-        with self.assertRaisesRegex(LiveUIError,"NAT"):
+        with self.assertRaisesRegex(LiveUIError,"/api/nat/add"):
             patch_backend(altered,self.model)
 
     def test_unrecognized_production_hashes_fail_closed(self):
@@ -159,7 +163,7 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
 
     def test_reject_guard_if_buried_inside_conditional(self):
         broken=SERVER.replace("        if not self.check_session(write=True):return",
-           "        if False:\\n            if not self.check_session(write=True):return".replace("\\\\n","\\n"))
+           "        if False:\n            if not self.check_session(write=True):return")
         with self.assertRaises(LiveUIError):
             patch_backend(broken,self.model)
 
