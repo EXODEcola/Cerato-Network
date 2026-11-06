@@ -10,7 +10,7 @@ usage() {
 [[ "$#" -eq 2 ]] || usage
 VERSION="$1"
 OUTPUT="$2"
-[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]] || usage
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((dev|beta|rc)\.[0-9]+))?$ ]] || usage
 [[ "$OUTPUT" == /* ]] || { echo "La destination doit être absolue." >&2; exit 2; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

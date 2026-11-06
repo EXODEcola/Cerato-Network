@@ -34,9 +34,9 @@ sys.path.insert(0,str(ROOT/"tools"))
 from build_release import (PackageError, canonical_json, validate_archive,
                            verify as verify_bundle, verify_signature)
 
-VERSION=re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?$")
+VERSION=re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-(dev|beta|rc)\.(\d+))?$")
 HEX_SHA=re.compile(r"^[a-f0-9]{64}$")
-CHANNELS={"stable","beta"}
+CHANNELS={"stable","beta","dev"}
 MAX_MANIFEST=32768
 MAX_INDEX=4096
 MAX_SIG=256
@@ -60,7 +60,7 @@ def _parse_version(version: str):
     major, minor, patch, prerelease, number=m.groups()
     # Stable ranks after all pre-releases of the same version.
     return (int(major), int(minor), int(patch),
-            2 if prerelease is None else (1 if prerelease=="rc" else 0),
+            2 if prerelease is None else (1 if prerelease=="rc" else (0 if prerelease=="beta" else -1)),
             int(number) if number is not None else 0)
 
 
@@ -147,7 +147,11 @@ def _channel_index(base_url: str, channel: str, key: Path, transport=None, now=N
         version=payload.get("version")
         _parse_version(version)
         if channel=="stable" and "-" in version:
-            raise DistributionError("Version bêta interdite sur stable")
+            raise DistributionError("Prerelease interdite sur stable")
+        if channel=="dev" and "-dev." not in version:
+            raise DistributionError("Le canal dev exige une version -dev.N")
+        if channel=="beta" and "-beta." not in version:
+            raise DistributionError("Le canal beta exige une version -beta.N")
         issued=payload.get("issued_at")
         expires=payload.get("expires_at")
         when=int(time.time()) if now is None else int(now)

@@ -66,6 +66,7 @@ class VisualInstallIntegrationTests(unittest.TestCase):
              patch.object(ctl,"_replace",side_effect=real_replace), \
              patch.object(ctl,"_network_fingerprint",side_effect=networkcheck), \
              patch.object(ctl,"_web_ok",side_effect=healthcheck), \
+             patch.object(ctl,"_controller_executable_ok",return_value=True), \
              patch.object(ctl,"_cmd",return_value=""), \
              patch.object(ctl,"_save",side_effect=state_save), \
              patch.object(ctl.time,"sleep",return_value=None), \

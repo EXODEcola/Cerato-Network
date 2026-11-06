@@ -37,7 +37,7 @@ def _trusted(config=TRUST_CONFIG):
     data=json.loads(config.read_text(encoding="utf8"))
     if (not isinstance(data,dict) or set(data)!={"base_url","channel","public_key"}
             or data["base_url"].rstrip("/")!=EXPECTED_URL
-            or data["channel"] not in ("stable","beta")):
+            or data["channel"] not in ("stable","beta","dev")):
         raise PublishError("Source HTTPS ou canal non approuvés")
     key=Path(data["public_key"])
     if (key.is_symlink() or not key.is_file() or
@@ -92,7 +92,7 @@ def _existing_channels(root):
     if location.stat().st_uid!=0 or location.stat().st_mode & 0o022:
         raise PublishError("Dossier de canaux non approuvé")
     snapshot={}
-    for name in ("stable.json","stable.sig","beta.json","beta.sig"):
+    for name in ("stable.json","stable.sig","beta.json","beta.sig","dev.json","dev.sig"):
         source=location/name
         if source.is_symlink():
             raise PublishError("Fichier de canal symbolique interdit")
@@ -104,6 +104,8 @@ def _existing_channels(root):
         raise PublishError("Paire beta incomplète")
     if set(snapshot).intersection({"stable.json","stable.sig"}) in ({"stable.json"},{"stable.sig"}):
         raise PublishError("Paire stable incomplète")
+    if set(snapshot).intersection({"dev.json","dev.sig"}) in ({"dev.json"},{"dev.sig"}):
+        raise PublishError("Paire Dev incomplète")
     return current,snapshot
 
 

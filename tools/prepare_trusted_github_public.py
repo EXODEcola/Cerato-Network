@@ -67,7 +67,7 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--fingerprint",required=True)
     parser.add_argument("--output",type=Path,required=True)
-    parser.add_argument("--channel",default="beta",choices=["beta","stable"])
+    parser.add_argument("--channel",default="beta",choices=["beta","stable","dev"])
     args=parser.parse_args()
     try:
         print(json.dumps(approved_public_key(args.fingerprint,args.output,args.channel),

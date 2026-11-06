@@ -93,6 +93,7 @@ class Plan:
         self.extra_ips=set()
         self.peers={}
         self.publications={}
+        self.public_routes={}
 
     def add_public_ip(self, ip: str, *, provider_confirmed: bool=False,
                       present_on_wan: bool=False):
@@ -117,11 +118,68 @@ class Plan:
             raise NetworkPlanError("IP de tunnel ou clé déjà utilisée")
         self.peers[name]=Peer(name,dest,wireguard_key)
 
+    def route_public_ip(self, public_ip: str, peer: str):
+        """Declare an exclusive routed /32 assignment; NEVER change the host.
+
+        This reserves the IPv4 for an agent-backed, policy-routed tunnel.
+        Gateway alias migration, WireGuard AllowedIPs, host forwarding,
+        firewall and SSH recovery are not performed by this model.
+        """
+        ip=ipv4(public_ip,public=True)
+        if ip not in self.extra_ips:
+            raise NetworkPlanError("IPv4 supplémentaire non enregistrée")
+        if peer not in self.peers:
+            raise NetworkPlanError("Machine inconnue")
+        if ip in self.public_routes:
+            raise NetworkPlanError("IPv4 déjà attribuée en mode routé")
+        if any(mapping.public_ip==ip for mapping in self.publications.values()):
+            raise NetworkPlanError("Supprimer ou migrer les publications NAT avant le routage")
+        self.public_routes[ip]=peer
+
+    def routed_preview(self):
+        """Declarative plan only: no direct ip, wg, nft or systemctl actions.
+
+        A future privileged agent must independently validate and apply the
+        plan, verify external connectivity, and restore the original network
+        state automatically on health-check failure.
+        """
+        return {
+            "mode":"routed-wg",
+            "applicable":False,
+            "reason":"Agent distant et basculement avec rollback non implémentés",
+            "gateway":[
+                {"public_ip":ip, "target_peer":peer,
+                 "tunnel_destination":self.peers[peer].private_ip,
+                 "public_cidr":ip+"/32",
+                 "require_peer_allowed_ips":[self.peers[peer].private_ip+"/32", ip+"/32"],
+                 "requires_local_wan_alias_migration":True,
+                 "requires_public_ip_forwarding_firewall":True}
+                for ip,peer in sorted(self.public_routes.items())
+            ],
+            "agents":[
+                {"peer":peer,"public_ip":ip,"prefix":32,
+                 "tunnel_interface":self.tunnel,
+                 "source_policy_routing_required":True,
+                 "preserve_existing_default_route":True,
+                 "host_firewall_controls_exposed_ports":True}
+                for ip,peer in sorted(self.public_routes.items())
+            ],
+            "safety":[
+                "external_management_access_required",
+                "tunnel_and_host_agent_health_checks",
+                "backup_and_timed_rollback_required",
+                "provider_assignment_confirmation_required",
+                "no_exposure_of_management_ip",
+            ],
+        }
+
     def publish(self, public_ip: str, peer: str, proto: str,
                 public_port: int, destination_port: int):
         ip=ipv4(public_ip,public=True)
         if ip not in self.extra_ips:
             raise NetworkPlanError("Utilise une IPv4 supplémentaire validée")
+        if ip in self.public_routes:
+            raise NetworkPlanError("IPv4 routée : gérer les ports sur la machine, sans NAT")
         if not isinstance(peer,str) or peer not in self.peers:
             raise NetworkPlanError("Machine inconnue")
         if proto not in PROTOCOLS:
@@ -163,4 +221,5 @@ class Plan:
             "extra_ipv4":sorted(self.extra_ips),
             "peers":[p.__dict__ for p in self.peers.values()],
             "publications":[m.__dict__ for m in self.publications.values()],
+            "routed_public_ipv4":self.routed_preview(),
         }

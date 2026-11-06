@@ -27,7 +27,7 @@ CONFIG=ROOT_CONFIG/"release-source.json"
 def provision(source_url, public_key, fingerprint, channel):
     if os.geteuid()!=0:
         raise ValueError("Installation de la clé réservée à root")
-    if channel not in ("stable","beta"):
+    if channel not in ("stable","beta","dev"):
         raise ValueError("Canal invalide")
     url=_base(source_url).rstrip("/")
     if not isinstance(fingerprint,str) or len(fingerprint)!=64 or any(c not in "0123456789abcdefABCDEF" for c in fingerprint):

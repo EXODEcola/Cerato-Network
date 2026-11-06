@@ -108,6 +108,64 @@ class AdditionalIPTests(unittest.TestCase):
             ipctl.remove_local("54.37.165.151")
         self.assertIn("54.37.165.151",self.addresses)
 
+    def test_routed_persistence_never_recreates_public_ip_on_wan(self):
+        public="54.37.165.151"
+        self.addresses.add(public)
+        ipctl.import_local(public)
+        cfg=json.loads(self.config.read_text())
+        cfg["pool"]=[public]
+        self.config.write_text(json.dumps(cfg))
+        original=self.state.read_bytes()
+        candidate=ipctl.plan_routed_state_after_cutover(public,"dell-r530")
+        # Planning is pure; it cannot change live addresses or state.
+        self.assertEqual(self.state.read_bytes(),original)
+        self.assertIn(public,self.addresses)
+        self.assertEqual(candidate["local_ipv4"],[])
+        self.assertEqual(candidate["routed_ipv4"],[
+            {"ip":public,"peer":"dell-r530","wan":"enp1s0f0"}])
+        # Simulate an approved external cutover of the already moved IP.
+        self.addresses.remove(public)
+        ipctl.save(candidate)
+        prior=len(self.commands)
+        self.assertEqual(ipctl.restore()["restored"],0)
+        self.assertEqual(ipctl.adopt_existing_pool()["adopted"],[])
+        self.assertNotIn(public,self.addresses)
+        self.assertFalse(any(cmd[:4]==("ip","-4","address","add")
+                             for cmd in self.commands[prior:]))
+        with self.assertRaises(ipctl.IPError):
+            ipctl.import_local(public)
+        managed=ipctl.status()["managed"]
+        self.assertEqual(managed[0]["mode"],"routed-wg")
+        self.assertEqual(managed[0]["peer"],"dell-r530")
+
+    def test_routed_state_planner_rejects_live_nat_publication(self):
+        ipctl.import_local("54.37.165.151")
+        cfg=json.loads(self.config.read_text())
+        cfg["pool"]=["54.37.165.151"]
+        cfg["mappings"]=[{"public_ip":"54.37.165.151","proto":"tcp",
+                          "public_port":8080,"target_port":8080}]
+        self.config.write_text(json.dumps(cfg))
+        with self.assertRaisesRegex(ipctl.IPError,"NAT active"):
+            ipctl.plan_routed_state_after_cutover("54.37.165.151","dell-r530")
+        self.assertEqual(ipctl.state_read()["routed_ipv4"],[])
+
+    def test_state_rejects_local_and_routed_duplicate(self):
+        public="54.37.165.151"
+        self.state.write_text(json.dumps({
+            "schema":1,"local_ipv4":[{"ip":public,"wan":"enp1s0f0"}],
+            "routed_ipv4":[{"ip":public,"wan":"enp1s0f0","peer":"dell-r530"}]
+        }))
+        with self.assertRaisesRegex(ipctl.IPError,"locale et routée"):
+            ipctl.state_read()
+
+    def test_legacy_local_state_remains_compatible(self):
+        public="54.37.165.151"
+        self.state.write_text(json.dumps({
+            "schema":1,"local_ipv4":[{"ip":public,"wan":"enp1s0f0"}]
+        }))
+        self.assertEqual(ipctl.state_read()["routed_ipv4"],[])
+        self.assertEqual(ipctl.state_read()["local_ipv4"][0]["ip"],public)
+
     def test_reject_wrong_wan_without_network_changes(self):
         cfg=json.loads(self.config.read_text())
         cfg["wan_if"]="eth9"

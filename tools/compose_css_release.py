@@ -12,7 +12,7 @@ import re
 
 SCHEMA="cerato-network-legacy-web-css-v1"
 MARKER=b"/* CERATO-NETWORK-SIGNED-CSS-V1 */"
-VERSION=re.compile(r"^v\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?$")
+VERSION=re.compile(r"^v\d+\.\d+\.\d+(?:-(?:dev|beta|rc)\.\d+)?$")
 
 
 class CSSReleaseError(ValueError):
