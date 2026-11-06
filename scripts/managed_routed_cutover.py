@@ -597,9 +597,24 @@ def persist(role):
     )
     atomic(target,service,0o644)
     command("systemctl","daemon-reload")
-    command("systemctl","enable",target.name)
+    # The peer must start immediately: "enable" alone only schedules the
+    # oneshot for a future reboot and cannot restore the policy route if
+    # networking is regenerated after the public-IP cutover.
     info["phase"]="committed"
     state_save(info)
+    if role=="peer":
+        command("systemctl","enable","--now",target.name)
+        ensure(command("systemctl","is-active","--quiet",target.name,
+                       check=False).returncode==0,
+               "Service peer non actif : rollback de migration conservé")
+        src_route=json.loads(command("ip","-j","-4","route","get",
+                                     "1.1.1.1","from",PUB))
+        ensure(len(src_route)==1 and src_route[0].get("dev")==WG,
+               "Routage source Dell incorrect : rollback de migration conservé")
+    else:
+        # Gateway restore re-renders nft. Do not trigger that mutation as a
+        # side-effect of persistence while a verified public route is active.
+        command("systemctl","enable",target.name)
     command("systemctl","disable","--now",timer_name(role)+".timer")
     return {"status":"committed","role":role,"persistent_service":target.name,
             "global_default_route_changed":False,
