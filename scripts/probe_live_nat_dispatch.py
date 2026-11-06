@@ -33,9 +33,12 @@ def _is_p_branch(test):
     """Exact p-comparison, no fuzzy substring search through source."""
     if not isinstance(test,ast.Compare) or not isinstance(test.left,ast.Name) or test.left.id!="p":
         return False
-    if not all(isinstance(op,(ast.Eq,ast.In)) for op in test.ops):
+    if (len(test.ops)!=1 or not isinstance(test.ops[0],ast.Eq)
+            or len(test.comparators)!=1
+            or not isinstance(test.comparators[0],ast.Constant)
+            or not isinstance(test.comparators[0].value,str)):
         return False
-    return True
+    return test.comparators[0].value in NAT_ROUTES
 
 def _route_values(test):
     result=set()
