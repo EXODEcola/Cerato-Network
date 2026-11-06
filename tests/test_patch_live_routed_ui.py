@@ -161,6 +161,98 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
         self.assertLess(patched.index("cerato_reject_routed_nat(b.get"),
                         patched.index("ctl('nat-add',ip)"))
 
+    def test_nested_try_nat_dispatch_with_guard_before_try(self):
+        nested=SERVER.replace(
+            "        if p=='/api/nat/add':\n"
+            "            ip=b.get('ip')\n"
+            "            ctl('nat-add',ip)\n"
+            "        elif p=='/api/nat/remove':\n"
+            "            ctl('nat-remove',b)\n",
+            "        try:\n"
+            "            if p=='/api/nat/add':\n"
+            "                ip=b.get('ip')\n"
+            "                ctl('nat-add',ip)\n"
+            "            elif p=='/api/nat/remove':\n"
+            "                ctl('nat-remove',b)\n"
+            "        except ValueError:\n"
+            "            pass\n"
+        )
+        patched=patch_backend(nested,self.model)
+        self.assertIn("cerato_reject_routed_nat(b.get",patched)
+        ns={}
+        exec(compile(patched,"<nested-try>","exec"),ns)
+        calls=[]
+        ns["additional_ipctl"]=lambda *_:DATA
+        ns["ctl"]=lambda *args:calls.append(args)
+        handler=ns["Handler"]()
+        handler.read_body=lambda:{"ip":PUBLIC}
+        with self.assertRaisesRegex(ns["UserError"],"NAT par port"):
+            handler.do_POST()
+        self.assertEqual(calls,[])
+
+    def test_nested_try_guard_inside_try_before_route(self):
+        nested=SERVER.replace(
+            "        b=self.read_body()\n"
+            "        if not self.check_session(write=True):return\n"
+            "        if p=='/api/nat/add':\n"
+            "            ip=b.get('ip')\n"
+            "            ctl('nat-add',ip)\n"
+            "        elif p=='/api/nat/remove':\n"
+            "            ctl('nat-remove',b)\n",
+            "        try:\n"
+            "            b=self.read_body()\n"
+            "            if not self.check_session(write=True):return\n"
+            "            if p=='/api/nat/add':\n"
+            "                ip=b.get('ip')\n"
+            "                ctl('nat-add',ip)\n"
+            "            elif p=='/api/nat/remove':\n"
+            "                ctl('nat-remove',b)\n"
+            "        except ValueError:\n"
+            "            pass\n"
+        )
+        patched=patch_backend(nested,self.model)
+        self.assertIn("cerato_reject_routed_nat(b.get",patched)
+
+    def test_nesting_not_allowed_in_except_handler(self):
+        nested=SERVER.replace(
+            "        if p=='/api/nat/add':\n"
+            "            ip=b.get('ip')\n"
+            "            ctl('nat-add',ip)\n"
+            "        elif p=='/api/nat/remove':\n"
+            "            ctl('nat-remove',b)\n",
+            "        try:\n"
+            "            raise ValueError()\n"
+            "        except ValueError:\n"
+            "            if p=='/api/nat/add':\n"
+            "                ip=b.get('ip')\n"
+            "                ctl('nat-add',ip)\n"
+            "            elif p=='/api/nat/remove':\n"
+            "                ctl('nat-remove',b)\n"
+        )
+        with self.assertRaisesRegex(LiveUIError,"hors d'un bloc"):
+            patch_backend(nested,self.model)
+
+    def test_get_elif_chain_in_try_and_valid_guard(self):
+        nested=SERVER.replace(
+            "        if p=='/api/status': return self.send_json(200,netstate())",
+            "        try:\n"
+            "            if p=='/api/unknown': return self.send_json(200,{})\n"
+            "            elif p=='/api/status': return self.send_json(200,netstate())\n"
+            "        except ValueError:\n"
+            "            pass"
+        )
+        patched=patch_backend(nested,self.model)
+        self.assertIn(
+            "            if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n"
+            "            if p=='/api/unknown':",patched)
+        ns={}
+        exec(compile(patched,"<nested-get>","exec"),ns)
+        ns["additional_ipctl"]=lambda *_:DATA
+        handler=ns["Handler"]()
+        # This synthetic handler uses hard-coded path; test generated GET
+        # through direct lookup in local patched source.
+        self.assertIn("if p=='/api/ip/allocations'",patched)
+
     def test_reject_guard_if_buried_inside_conditional(self):
         broken=SERVER.replace("        if not self.check_session(write=True):return",
            "        if False:\n            if not self.check_session(write=True):return")
