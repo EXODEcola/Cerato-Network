@@ -15,6 +15,12 @@ on:
         default: beta
         type: choice
         options: [dev, beta, stable]
+      release_kind:
+        description: "Type de release à signer"
+        required: true
+        type: choice
+        default: css
+        options: [css, routed-ui]
       from_version:
         description: "Version OVH cible, ex. v0.0.0"
         required: true
@@ -45,6 +51,7 @@ jobs:
       REQUEST_VERSION: ${{ inputs.version }}
       REQUEST_CHANNEL: ${{ inputs.channel }}
       REQUEST_FROM_VERSION: ${{ inputs.from_version }}
+      REQUEST_KIND: ${{ inputs.release_kind }}
       SCHEDULE_ENTRY: ${{ github.event.schedule }}
     steps:
       - name: Checkout du commit main approuve
@@ -63,6 +70,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$REQUEST_KIND" == "css" || "$REQUEST_KIND" == "routed-ui" ]]
             [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((dev|beta|rc)\.[0-9]+))?$ ]]
             [[ "$REQUEST_FROM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
             if [[ "$REQUEST_CHANNEL" == "dev" ]]; then
@@ -131,9 +139,16 @@ jobs:
             fi
             mkdir -p "$OUT/source"
             cp LICENSE README.md "$OUT/source/"
-            python3 tools/compose_css_release.py \
-              --source release-assets/graphite-operations.css \
-              --destination "$OUT/source/live-overlay" --from-version "$FROM"
+            if [[ "$REQUEST_KIND" == "routed-ui" ]]; then
+              python3 tools/compose_routed_patch_release.py \
+                --patch integrations/patch_live_routed_ui.py \
+                --model network/routed_ui_status.py \
+                --destination "$OUT/source/live-overlay" --from-version "$FROM"
+            else
+              python3 tools/compose_css_release.py \
+                --source release-assets/graphite-operations.css \
+                --destination "$OUT/source/live-overlay" --from-version "$FROM"
+            fi
             python3 tools/release_pipeline.py prepare --source "$OUT/source" \
               --output "$OUT/release" --version "$VERSION"
             python3 tools/release_pipeline.py sign --output "$OUT/release" \
@@ -163,6 +178,10 @@ jobs:
                      --notes "Release Graphite CSS signee Ed25519. Aucun backend ni JavaScript remplace."
                      --latest=false)
             if [[ "$CHANNEL" == "beta" || "$CHANNEL" == "dev" ]]; then options+=(--prerelease); fi
+            if [[ "$REQUEST_KIND" == "routed-ui" ]]; then
+              options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION" --notes "Correctif IPv4 routée signé : autorisation du patcher local approuvé, sans source backend historique." --latest=false)
+              [[ "$CHANNEL" == "stable" ]] || options+=(--prerelease)
+            fi
             gh release create "$VERSION" \
               "$OUT/release/manifest.json" "$OUT/release/manifest.sig" \
               "$OUT/release/cerato-network-release.zip" \
