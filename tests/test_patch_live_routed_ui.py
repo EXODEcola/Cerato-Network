@@ -98,7 +98,7 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
         self.assertIn("option.disabled=true",patched)
         self.assertIn("control.disabled=true",patched)
         self.assertIn("function render(){if(!live)return;",patched)
-        self.assertIn("function updates(){return ''}",patched)
+        self.assertIn("function updates(){return '';}",patched)
         self.assertNotIn("fetch('https",patched)
         self.assertNotIn("nft ",patched)
 
