@@ -100,6 +100,16 @@ function ceratoEnhanceIPv4(){
     }
   }
   if(screen==='nat'){
+    if(routed.size){
+      for(const el of base.querySelectorAll('p,div,aside')){
+        if(el.children.length===0 && el.textContent.includes('Une règle NAT redirige un port vers WireGuard.')){
+          el.textContent='Les IPv4 déjà routées vers une machine ne sont pas des publications NAT. '
+            +'Pour les exposer, gère les ports dans le pare-feu de la machine cible. '
+            +'Le NAT par port reste réservé aux autres IPv4 non routées.';
+          break;
+        }
+      }
+    }
     for(const option of document.querySelectorAll('select option')){
       if(routed.has(option.value.trim())||routed.has(option.textContent.trim())){
         option.disabled=true;
