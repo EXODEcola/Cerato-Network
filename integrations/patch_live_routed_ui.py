@@ -333,7 +333,7 @@ def patch_backend(source: str, model: str) -> str:
             indent=" "*get_anchor.col_offset
             if (get_anchor.col_offset>32 or
                     not original_line.startswith(indent+"if ") or
-                    not original_line.rstrip().endswith(":")):
+                    ":" not in original_line):
                 raise LiveUIError("Point d'insertion GET non sécurisé")
             lines.insert(get_anchor.lineno-1,
                          indent+"if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n")
