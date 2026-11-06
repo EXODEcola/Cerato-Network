@@ -77,6 +77,14 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
             namespace["cerato_reject_routed_nat"](PUBLIC)
         namespace["cerato_reject_routed_nat"]("54.37.165.160")
 
+    def test_backend_accepts_exact_double_quoted_post_nat_branch(self):
+        modified=SERVER.replace("if p=='/api/nat/add':",
+                                'elif p == "/api/nat/add":')
+        patch=patch_backend(modified,self.model)
+        self.assertIn('elif p == "/api/nat/add":\n'
+                      '            cerato_reject_routed_nat',patch)
+        self.assertEqual(patch.count("cerato_reject_routed_nat(b.get"),1)
+
     def test_backend_nat_guard_rejects_before_legacy_ctl_mutation(self):
         patched=patch_backend(SERVER,self.model)
         namespace={}
