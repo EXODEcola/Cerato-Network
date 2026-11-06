@@ -60,7 +60,7 @@ def summarize(ipctl_status):
                      "state":"local" if present else "warning",
                      "label":"Locale sur OVH" if present else "Locale — alias WAN absent",
                      "peer":None,"present_on_wan":present,
-                     "assigned":present,"can_remove":False}
+                     "assigned":True,"can_remove":False}
         else:
             peer=row.get("peer")
             on_wan=row.get("present_on_wan")
