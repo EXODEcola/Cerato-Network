@@ -206,6 +206,73 @@ class ManagedCutoverTests(TestCase):
             self.assertTrue(original_path(result["archived_state"]).is_dir())
             self.assertFalse((units/"cerato-routed-rollback-peer.timer").exists())
 
+    def test_peer_commit_starts_restore_unit_and_confirms_route(self):
+        from types import SimpleNamespace
+        operations=[]
+        def cmd(*args,**kwargs):
+            operations.append(args)
+            if args[0]=="curl":return installer.PUB
+            if args[:3]==("systemctl","is-active","--quiet"):
+                return SimpleNamespace(returncode=0)
+            if args[:4]==("ip","-j","-4","route"):
+                return '[{"dev":"wg-cerato"}]'
+            return ""
+        with patch.object(installer,"read_state",return_value={
+                    "role":"peer","phase":"active"}), \
+             patch.object(installer,"remaining_seconds",return_value=600), \
+             patch.object(installer,"command",side_effect=cmd), \
+             patch.object(installer,"state_save") as save, \
+             patch.object(installer,"atomic"):
+            result=installer.persist("peer")
+        self.assertEqual(result["status"],"committed")
+        self.assertIn(("systemctl","enable","--now","cerato-routed-peer.service"),operations)
+        self.assertIn(("systemctl","disable","--now",
+                       "cerato-routed-rollback-peer.timer"),operations)
+        self.assertLess(operations.index(
+            ("systemctl","enable","--now","cerato-routed-peer.service")),
+            operations.index(
+            ("systemctl","disable","--now","cerato-routed-rollback-peer.timer")))
+        save.assert_called_once()
+
+    def test_peer_commit_preserves_rollback_if_source_route_is_wrong(self):
+        from types import SimpleNamespace
+        operations=[]
+        def cmd(*args,**kwargs):
+            operations.append(args)
+            if args[0]=="curl":return installer.PUB
+            if args[:3]==("systemctl","is-active","--quiet"):
+                return SimpleNamespace(returncode=0)
+            if args[:4]==("ip","-j","-4","route"):
+                return '[{"dev":"eno1"}]'
+            return ""
+        with patch.object(installer,"read_state",return_value={
+                    "role":"peer","phase":"active"}), \
+             patch.object(installer,"remaining_seconds",return_value=600), \
+             patch.object(installer,"command",side_effect=cmd), \
+             patch.object(installer,"state_save"), \
+             patch.object(installer,"atomic"):
+            with self.assertRaises(installer.CutoverError):
+                installer.persist("peer")
+        self.assertFalse(any(args[:3]==("systemctl","disable","--now") for args in operations))
+
+    def test_gateway_commit_does_not_start_nft_rewriter_live(self):
+        operations=[]
+        def cmd(*args,**kwargs):
+            operations.append(args)
+            return ""
+        with patch.object(installer,"read_state",return_value={
+                    "role":"gateway","phase":"active"}), \
+             patch.object(installer,"remaining_seconds",return_value=600), \
+             patch.object(installer,"command",side_effect=cmd), \
+             patch.object(installer,"address_exists",return_value=False), \
+             patch.object(installer,"route_public_to_wg",return_value=True), \
+             patch.object(installer,"state_save"), \
+             patch.object(installer,"atomic"):
+            result=installer.persist("gateway")
+        self.assertEqual(result["status"],"committed")
+        self.assertIn(("systemctl","enable","cerato-routed-gateway.service"),operations)
+        self.assertFalse(any(args[:3]==("systemctl","enable","--now") for args in operations))
+
     def test_no_automatic_live_change_on_import(self):
         self.assertTrue(callable(installer.prepare))
         self.assertTrue(callable(installer.activate))
