@@ -38,10 +38,10 @@ class RoutedStateAdoptionTests(unittest.TestCase):
         self.wan_alias=False
         self.correct_route=True
         self.recent=True
-        mock=patch.object(ipctl,"run",side_effect=self.run)
+        mock=patch.object(ipctl,"run",side_effect=self.fake_run)
         mock.start();self.addCleanup(mock.stop)
 
-    def run(self,*args):
+    def fake_run(self,*args):
         self.calls.append(args)
         if args==("ip","-j","-4","route","get","1.1.1.1"):
             return json.dumps([{"dev":"enp1s0f0","src":"51.210.223.57"}])
