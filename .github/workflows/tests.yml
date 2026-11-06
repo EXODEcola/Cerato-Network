@@ -10,6 +10,9 @@ on:
     branches: [main]
     paths:
       - 'network/**'
+      - 'integrations/patch_live_routed_ui.py'
+      - 'tests/test_patch_live_routed_ui.py'
+      - 'tests/test_routed_ui_status.py'
       - 'scripts/preflight_public_ipv4.py'
       - 'scripts/audit_routed_cutover_dependencies.py'
       - 'scripts/inspect_live_network_engine.py'
