@@ -277,6 +277,92 @@ def plan_routed_state_after_cutover(ip,peer,*,config=None,state=None):
     return candidate
 
 
+def adopt_verified_routed():
+    """Reconcile ONLY persistence metadata for an already-routed public /32.
+
+    Requires a matching, pre-existing routed_ipv4 entry in Cerato config.
+    No address, route, wg, nft, service or config.json writes. A matching
+    active WireGuard route and peer are mandatory; otherwise refuse.
+    """
+    cfg=read_config()
+    wan,primary=effective_wan(cfg)
+    planned=cfg.get("routed_ipv4")
+    if not isinstance(planned,list) or len(planned)!=1:
+        raise IPError("Attribution routée absente ou ambiguë dans config.json")
+    row=planned[0]
+    if not isinstance(row,dict) or set(row)!={"ip","peer"}:
+        raise IPError("Attribution routée persistante invalide")
+    ip=validate_public(row["ip"])
+    peer=row["peer"]
+    if ip==primary or ip not in cfg["pool"] or peer not in cfg["peers"]:
+        raise IPError("IPv4 ou pair non reconnu par Cerato")
+    if any(not isinstance(m,dict) or m.get("public_ip")==ip
+           for m in cfg["mappings"]):
+        raise IPError("Publication NAT incompatible avec une IPv4 routée")
+    if ip in listed(wan):
+        raise IPError("L'IPv4 routée est encore présente sur WAN")
+
+    wg=cfg.get("wg_if")
+    if not isinstance(wg,str) or not IFACE.fullmatch(wg):
+        raise IPError("Interface WireGuard non reconnue")
+    route=json.loads(run("ip","-j","-4","route","get",ip))
+    if len(route)!=1 or route[0].get("dev")!=wg:
+        raise IPError("Route publique /32 absente de WireGuard")
+    if run("sysctl","-n","net.ipv4.ip_forward").strip()!="1":
+        raise IPError("Transfert IPv4 inactif")
+    peer_key=cfg["peers"][peer].get("pubkey")
+    if not isinstance(peer_key,str) or not peer_key:
+        raise IPError("Identité du pair WireGuard manquante")
+    assignments={}
+    for line in run("wg","show",wg,"allowed-ips").splitlines():
+        fields=line.replace(","," ").split()
+        if len(fields)>=2:
+            assignments[fields[0]]=fields[1:]
+    if peer_key not in assignments:
+        raise IPError("Pair WireGuard réel différent de la configuration")
+    try:
+        allowed=[ipaddress.ip_network(net,strict=False)
+                 for net in assignments[peer_key]]
+    except ValueError as exc:
+        raise IPError("AllowedIPs incohérents") from exc
+    if ipaddress.ip_network(ip+"/32") not in allowed:
+        raise IPError("Le pair n'autorise pas explicitement la /32 publique")
+    handshakes={}
+    for line in run("wg","show",wg,"latest-handshakes").splitlines():
+        fields=line.split()
+        if len(fields)==2:
+            handshakes[fields[0]]=int(fields[1])
+    latest=handshakes.get(peer_key,0)
+    if latest<=0 or not 0<=time.time()-latest<300:
+        raise IPError("Handshake WireGuard du pair trop ancien")
+
+    state=state_read()
+    existing=[x for x in state["routed_ipv4"] if x["ip"]==ip]
+    if existing:
+        if (len(existing)!=1 or existing[0]["peer"]!=peer or
+                existing[0]["wan"]!=wan):
+            raise IPError("Attribution enregistrée contradictoire")
+        return {"status":"already_managed","mode":"routed-wg",
+                "peer":peer,"network_modified":False}
+    locals_matching=[x for x in state["local_ipv4"] if x["ip"]==ip]
+    if len(locals_matching)>1 or (
+            locals_matching and locals_matching[0]["wan"]!=wan):
+        raise IPError("État local historique incompatible")
+    candidate={**state,
+        "local_ipv4":[x for x in state["local_ipv4"] if x["ip"]!=ip],
+        "routed_ipv4":[*state["routed_ipv4"],
+                       {"ip":ip,"peer":peer,"wan":wan}]}
+    # Only write state; an existing rooted config and operational route are
+    # mandatory. Never recreate this /32 as a WAN alias during restore().
+    save(candidate)
+    after=status()
+    if not any(x.get("ip")==ip and x.get("mode")=="routed-wg"
+               and x.get("peer")==peer for x in after["managed"]):
+        raise IPError("État persistant non visible après enregistrement")
+    return {"status":"adopted","mode":"routed-wg","peer":peer,
+            "network_modified":False}
+
+
 def remove_local(ip):
     cfg,wan,address,primary=preflight(ip)
     if address in cfg["pool"]:
@@ -307,6 +393,7 @@ def main():
     sub.add_parser("status")
     sub.add_parser("restore")
     sub.add_parser("adopt-existing-pool")
+    sub.add_parser("adopt-verified-routed")
     p=sub.add_parser("preview");p.add_argument("ip");p.add_argument("--mode",default="local-nat")
     a=sub.add_parser("import-local");a.add_argument("ip")
     d=sub.add_parser("remove-local");d.add_argument("ip")
@@ -321,6 +408,7 @@ def main():
         elif args.action=="preview":result=preview(args.ip,args.mode)
         elif args.action=="restore":result=restore()
         elif args.action=="adopt-existing-pool":result=adopt_existing_pool()
+        elif args.action=="adopt-verified-routed":result=adopt_verified_routed()
         elif args.action=="import-local":result=import_local(args.ip)
         else:result=remove_local(args.ip)
     except (IPError,OSError,ValueError,KeyError,TypeError) as exc:
