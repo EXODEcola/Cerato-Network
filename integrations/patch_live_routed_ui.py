@@ -212,11 +212,42 @@ def _reachable_method_nodes(cls,root):
     return reached
 
 
-def _find_protected_branch(source,tree,verb,route,*,write):
-    """Only a top-level branch in a reachable helper with a dominating auth gate.
+def _preceding_statements(statements, branch, depth=0):
+    """Find lexically preceding statements on the unique supported control path.
 
-    We intentionally refuse an unrecognized nested authorization flow.
-    This is a static gate, never proof of runtime session or CSRF safety.
+    A nested if/elif or try BODY is allowed; loops, with, except handlers
+    and finally branches are refused. Guards must occur before the route
+    along this path, not simply somewhere else in the helper.
+    """
+    if depth>12:
+        raise LiveUIError("Imbrication du routeur HTTP excessive")
+    found=[]
+    for i,node in enumerate(statements):
+        if node is branch:
+            found.append(list(statements[:i]))
+            continue
+        subblocks=[]
+        if isinstance(node,ast.If):
+            subblocks=[node.body,node.orelse]
+        elif isinstance(node,(ast.Try,ast.TryStar)):
+            # Never inject into error/finally handlers. The normal try body
+            # and else branch can contain a guarded HTTP dispatch.
+            subblocks=[node.body,node.orelse]
+        for sub in subblocks:
+            nested=_preceding_statements(sub,branch,depth+1) if sub else None
+            if nested is not None:
+                found.append(list(statements[:i])+nested)
+    if len(found)>1:
+        raise LiveUIError("Plusieurs chemins HTTP vers la branche NAT")
+    return found[0] if found else None
+
+
+def _find_protected_branch(source,tree,verb,route,*,write):
+    """AST-only analysis of delegated and nested HTTP branches.
+
+    Check-session must dominate the branch on the accepted lexical path.
+    As with any structural check, it does not prove all runtime auth/CSRF
+    semantics, so production deployment still needs integration tests.
     """
     found=[]
     for cls in (n for n in ast.walk(tree) if isinstance(n,ast.ClassDef)):
@@ -224,38 +255,39 @@ def _find_protected_branch(source,tree,verb,route,*,write):
         for method in cls.body:
             if not isinstance(method,ast.FunctionDef) or method.name not in reachable:
                 continue
-            statements=method.body
             matches=[n for n in ast.walk(method) if _is_branch(n,route)]
             for branch in matches:
-                def contains(outer,inner):
-                    return any(child is inner for child in ast.walk(outer))
-                roots=[(idx,node) for idx,node in enumerate(statements)
-                       if contains(node,branch)]
-                if len(roots)!=1:
-                    raise LiveUIError("Arbre des branches HTTP ambigu")
-                index,root=roots[0]
-                # A top-level if/elif chain is allowed. A nested conditional,
-                # try, loop or match inside the route's parent is rejected.
-                if not isinstance(root,ast.If):
-                    raise LiveUIError("Branche API NAT imbriquée non reconnue")
-                chain=root
-                while chain is not branch and len(chain.orelse)==1 and isinstance(chain.orelse[0],ast.If):
-                    chain=chain.orelse[0]
-                if chain is not branch:
-                    raise LiveUIError("Branche HTTP non directement accessible")
-                guards=[n for n in statements[:index] if _guard(n,write)]
+                predecessors=_preceding_statements(method.body,branch)
+                if predecessors is None:
+                    raise LiveUIError("Branche API NAT hors d'un bloc HTTP normal sécurisé")
+                guards=[n for n in predecessors if _guard(n,write)]
                 if len(guards)!=1:
                     raise LiveUIError("Garde d'authentification avant route absent ou ambigu")
-                if write and len([n for n in statements[:index] if _body_read(n)])!=1:
+                if write and len([n for n in predecessors if _body_read(n)])!=1:
                     raise LiveUIError("Lecture du formulaire avant route absente ou ambiguë")
                 if branch.end_lineno is None or not branch.body or (
                     write and branch.body[0].lineno<=branch.lineno
                 ):
                     raise LiveUIError("Branche HTTP compacte non patchable")
-                found.append(branch)
+                found.append((branch,method))
     if len(found)!=1:
         raise LiveUIError("Branche HTTP authentifiée introuvable ou dupliquée : "+route)
     return found[0]
+
+
+def _if_chain_head(method,branch):
+    """Find the first if in an if/elif chain so a new sibling is valid."""
+    parents={}
+    for node in ast.walk(method):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)]=node
+    head=branch
+    while True:
+        parent=parents.get(id(head))
+        if not (isinstance(parent,ast.If)
+                and len(parent.orelse)==1 and parent.orelse[0] is head):
+            return head
+        head=parent
 
 
 def _inject_after_branch_line(source,branch,guard_call):
@@ -278,12 +310,16 @@ def patch_backend(source: str, model: str) -> str:
             "def cerato_routed_allocations(" in source):
         raise LiveUIError("Backend Additional IPv4 incompatible ou déjà corrigé")
     original=ast.parse(source)
-    nat=_find_protected_branch(source,original,"POST","/api/nat/add",write=True)
-    # The removed route is NOT changed: keep existing NAT unpublish semantics.
-    remove=_find_protected_branch(source,original,"POST","/api/nat/remove",write=True)
-    get=_find_protected_branch(source,original,"GET","/api/status",write=False)
+    nat,nat_method=_find_protected_branch(
+        source,original,"POST","/api/nat/add",write=True)
+    # Keep existing NAT unpublish semantics; both routes must be present.
+    remove,remove_method=_find_protected_branch(
+        source,original,"POST","/api/nat/remove",write=True)
+    get,get_method=_find_protected_branch(
+        source,original,"GET","/api/status",write=False)
     if nat.lineno==remove.lineno or get.lineno==nat.lineno:
         raise LiveUIError("Dispatch API incompatible")
+    get_anchor=_if_chain_head(get_method,get)
     # Inject from bottom upwards to preserve original source line positions.
     inserts=sorted([(nat,'cerato_reject_routed_nat(b.get("public_ip") or b.get("ip"))'),
                     (get,'return self.send_json(200,cerato_routed_allocations()) if p=="/api/ip/allocations" else None')],
@@ -293,9 +329,13 @@ def patch_backend(source: str, model: str) -> str:
             # Insert a new sibling branch *before* the existing /api/status
             # route, not inside it, so /api/ip/allocations is reachable.
             lines=source.splitlines(keepends=True)
-            original_line=lines[branch.lineno-1]
-            indent=" "*branch.col_offset
-            lines.insert(branch.lineno-1,
+            original_line=lines[get_anchor.lineno-1]
+            indent=" "*get_anchor.col_offset
+            if (get_anchor.col_offset>32 or
+                    not original_line.startswith(indent+"if ") or
+                    not original_line.rstrip().endswith(":")):
+                raise LiveUIError("Point d'insertion GET non sécurisé")
+            lines.insert(get_anchor.lineno-1,
                          indent+"if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n")
             source="".join(lines)
         else:
