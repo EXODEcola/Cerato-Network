@@ -142,6 +142,15 @@ def patch_backend(source: str, model: str) -> str:
     status=list(status_pat.finditer(source))
     if len(status)!=1:
         raise LiveUIError("Handler GET status live introuvable")
+    # Ensure the inserted read-only API is behind the same session check as
+    # GET /api/status, not merely that a check exists elsewhere in the file.
+    get_head=source.rfind("    def do_GET(self):",0,status[0].start())
+    get_tail=source.rfind("    def do_POST(self):",0,status[0].start())
+    if get_head<0 or get_tail>get_head:
+        raise LiveUIError("Handler GET authentifié non vérifiable")
+    get_prefix=source[get_head:status[0].start()]
+    if not re.search(r"if not self\.check_session\(\):",get_prefix):
+        raise LiveUIError("Protection de session avant GET status non vérifiable")
     get=status[0].group(0)
     indent=status[0].group("indent")
     new_get=indent+"if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n"+get
@@ -151,6 +160,10 @@ def patch_backend(source: str, model: str) -> str:
     matches=list(natpat.finditer(source))
     if len(matches)!=1:
         raise LiveUIError("Handler NAT live absent ou ambigu")
+    post_head=source.rfind("    def do_POST(self):",0,matches[0].start())
+    if post_head<0 or not re.search(
+            r"if not self\.check_session\(write=True\)",source[post_head:matches[0].start()]):
+        raise LiveUIError("Protection CSRF/compte avant POST NAT non vérifiable")
     nat=matches[0].group(0)
     nat_indent=matches[0].group("indent")
     next_line=nat_indent+'    cerato_reject_routed_nat(b.get("public_ip") or b.get("ip"))'
