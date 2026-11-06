@@ -166,7 +166,13 @@ def patch_backend(source: str, model: str) -> str:
     new_get=indent+"if p=='/api/ip/allocations': return self.send_json(200,cerato_routed_allocations())\n"+get
     source=source.replace(get,new_get,1)
     # Match exactly ONE NAT handler; do not guess API changes.
-    natpat=re.compile(r"^(?P<indent> {8,24})if p=='/api/nat(?:/add)?':[ \t]*$",re.M)
+    # The real RISE-1 NAT route may use whitespace, double quotes, or
+    # "elif" instead of the original single-quoted "if". Accept only an
+    # exact, standalone p == '/api/nat/add' (or '/api/nat') branch.
+    # A compound/membership/dynamic route still fails closed.
+    natpat=re.compile(
+        r"""^(?P<indent> {8,24})(?:if|elif)\s+p\s*==\s*(?P<quote>['"])/api/nat(?:/add)?(?P=quote)\s*:[ \t]*$""",
+        re.M)
     matches=list(natpat.finditer(source))
     if len(matches)!=1:
         raise LiveUIError("Handler NAT live absent ou ambigu")
