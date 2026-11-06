@@ -14,7 +14,7 @@ La release GitHub réellement publiée pour la bêta au 6 novembre est v0.1.0-be
 
 Les corrections en PR GitHub sont du code non déployé ; les tests verts ne les installent pas. Le frontend historique du RISE-1 (port 8787) et le prototype autonome web/app.js du dépôt sont différents. Remplacer brutalement le frontend ou le backend live par celui du dépôt casserait potentiellement les sessions, les routes et l'authentification.
 
-La page NAT peut légitimement rester vide : une IPv4 publique totalement routée au Dell ne requiert pas de DNAT. En revanche, les pages Adresses IPv4 et Vue d'ensemble doivent compter cette IPv4 comme utilisée et montrer le peer dall-r530. Les boutons NAT et retrait du pool doivent être désactivés pour l'adresse routée, avec protection serveur. Le correctif read-only network/routed_ui_status.py et le staging de integrations/patch_live_routed_ui.py sont prévus pour cette étape, mais ne sont pas des releases Web actuellement installées.
+La page NAT peut légitimement rester vide : une IPv4 publique totalement routée au Dell ne requiert pas de DNAT. En revanche, les pages Adresses IPv4 et Vue d'ensemble doivent compter cette IPv4 comme utilisée et montrer le peer dell-r530. Les boutons NAT et retrait du pool doivent être désactivés pour l'adresse routée, avec protection serveur. Le correctif read-only network/routed_ui_status.py et le staging de integrations/patch_live_routed_ui.py sont prévus pour cette étape, mais ne sont pas des releases Web actuellement installées.
 
 ## Pré-requis pour une prochaine release bêta réellement installable
 
