@@ -81,6 +81,7 @@ class IsolatedRuntimeTests(unittest.TestCase):
                      "status":"runtime_missing","venv_module_available":True}), \
                  patch.object(m,"call",side_effect=fake_call), \
                  patch.object(m,"root_owned_venv",return_value=True), \
+                 patch.object(m,"trusted_venv_config",return_value=True), \
                  patch.object(m.pwd,"getpwnam",return_value=account):
                 result=m.install()
             self.assertEqual(result["status"],"runtime_ready_inactive")
