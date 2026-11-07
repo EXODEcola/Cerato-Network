@@ -76,7 +76,7 @@ def systemd_status():
     }
     args=["/usr/bin/systemctl","show",WEB_SERVICE,
           *[("-p"+key) for key in fields],
-          "-pReadWritePaths","-pNoNewPrivileges"]
+          "-pReadWritePaths","-pNoNewPrivileges","-pEnvironment"]
     p=run_readonly(*args)
     if not p or p.returncode:
         return {"inspection":"unavailable"}
@@ -90,6 +90,8 @@ def systemd_status():
         "protect_home":options.get("ProtectHome")=="yes",
         "private_tmp":options.get("PrivateTmp")=="yes",
         "no_new_privileges":options.get("NoNewPrivileges")=="yes",
+        "trusted_https_origin_declared":bool(re.search(
+            r"(?:^|\\s)CERATO_WEB_ORIGIN=https://",options.get("Environment",""))),
         "auth_storage_write_scope":
             "/var/lib/cerato-network-auth" in paths,
         "service_active":bool(
