@@ -14,6 +14,8 @@ sys.path.insert(0,str(ROOT/"updates"))
 from compose_routed_patch_release import compose,RoutedReleaseError
 from build_release import build,verify
 import live_controller as ctl
+from channel_index import create_channel
+from stage_signed_static_release import validate as validate_static, stage as stage_static
 
 class RoutedUIApprovalTests(unittest.TestCase):
     def make_signed(self,folder):
@@ -48,6 +50,25 @@ class RoutedUIApprovalTests(unittest.TestCase):
             self.assertIn("cerato-network/live-overlay/routed-ui.json",members)
             self.assertNotIn("cerato-network/live-overlay/backend/server.py",members)
             self.assertNotIn("cerato-network/live-overlay/web/app.js",members)
+
+    def test_fully_signed_beta_is_accepted_by_static_mirror(self):
+        with tempfile.TemporaryDirectory() as folder:
+            release,source=self.make_signed(folder)
+            folder=Path(folder)
+            keys=folder/"key.pem"
+            public=folder/"pub.pem"
+            channel=folder/"channels"
+            pointer=create_channel(release,"beta",channel,keys,public,
+                                   validity_seconds=604800)
+            self.assertEqual(pointer["version"],"v0.1.1-beta.1")
+            version,files=validate_static(release,channel,public,"beta")
+            self.assertEqual(version,"v0.1.1-beta.1")
+            self.assertEqual(len(files),5)
+            output=folder/"public-staging"
+            staged=stage_static(release,channel,public,"beta",output)
+            self.assertTrue(staged["signature_verified"])
+            self.assertFalse(staged["published_to_ovh"])
+            self.assertFalse(staged["network_modified"])
 
     def test_refuses_live_source_drift_before_any_execution(self):
         with tempfile.TemporaryDirectory() as folder:
