@@ -7,6 +7,7 @@ tests and a same-origin integration review before production activation.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -46,8 +47,13 @@ def stage(source_root:Path,destination:Path, *, baseline:Path=BASELINE)->dict:
     inventory=inspect(src/"backend/server.py",src/"web/app.js")
     if inventory["server_sha256"]!=base.get("server_sha256"):
         raise NativeAuthUIStageError("Empreinte backend incompatible avec RISE-1")
+    if inventory["frontend_sha256"]!=base.get("frontend_sha256"):
+        raise NativeAuthUIStageError("Empreinte de l'interface JavaScript non approuvée")
     app=_source(src/"web/app.js").decode("utf8")
     css=_source(src/"web/style.css").decode("utf8")
+    approved_css=base.get("style_sha256")
+    if approved_css is not None and hashlib.sha256(css.encode("utf8")).hexdigest()!=approved_css:
+        raise NativeAuthUIStageError("Empreinte CSS différente de la copie approuvée")
     if any(app.count(anchor)!=1 for anchor in REQUIRED_JS):
         raise NativeAuthUIStageError("Interfaces historiques inconnues : aucun patch")
     if STYLE_MARKER not in css or MARKER in app:
