@@ -273,8 +273,8 @@ function dashboard(main) {
            'IPv4 complètes sur WireGuard'),
       card('IPv4 disponibles',routes?routes.available_count:'—',
            'Adresses sans attribution'),
-      card('Publications de ports',routes?.nat_publications??'—',
-           'Affichage historique uniquement')
+      card('Alertes de routage',routes?routes.warnings:'—',
+           'Conflits ou interfaces à vérifier')
     );
     main.append(routedGrid);
     if(state.ipv4Error)main.append(paragraph(state.ipv4Error,'cerato-warning'));
@@ -472,7 +472,7 @@ function updatesView(main) {
   const grid = node('div','data-grid');
   grid.append(card('Version installée', data?.installed_version || 'Non suivie','État du panneau'),
               card('Canal', data?.channel || 'Stable','Stable / Bêta'),
-              card('Release disponible',data?.available_version || 'Indisponible','Archive du VPS de build'));
+              card('Release disponible',data?.available_version || 'Indisponible','Archive vérifiée par le signataire'));
   area.append(grid);
   const indicator = node('div','update-verify', data?.verified
       ? '✓ Signature Ed25519 et SHA-256 vérifiés'
@@ -500,7 +500,7 @@ function updatesView(main) {
   blocked.disabled = true;
   blocked.title = 'Activation après tests de sauvegarde, rollback et déploiement des agents';
   area.append(blocked);
-  area.append(paragraph('La publication est réalisée sur le VPS de build. Aucune installation ni action distante n’est possible dans ce mode de développement.'));
+  area.append(paragraph('Les mises à jour installables sur OVH requièrent une distribution signée et une migration de compatibilité validée. Aucune installation n’est autorisée dans cette console de test.'));
   main.appendChild(area);
 }
 function renderPanel() {
