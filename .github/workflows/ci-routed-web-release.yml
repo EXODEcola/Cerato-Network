@@ -1,0 +1,40 @@
+name: Cerato Network - Validation release IPv4 Web
+
+# Only the release review branch. No build handoff, signer, deployment or OVH SSH.
+on:
+  push:
+    branches:
+      - release/routed-ipv4-web-beta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: routed-ipv4-web-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Verifier correctif Web + archive + tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer les dependances CI de tests
+        run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Tester syntaxe et scripts de preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q network updates tools tests integrations
+          bash -n scripts/upgrade-live-update-engine.sh
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
+      - name: Suite Python complete et compatibilite du correctif
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -q
