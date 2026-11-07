@@ -115,6 +115,25 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
         self.assertNotIn("fetch('https",patched)
         self.assertNotIn("nft ",patched)
 
+    def test_nat_view_renders_direct_ipv4_routes_without_fake_nat_rule(self):
+        patched=patch_frontend(FRONT)
+        self.assertIn("function ceratoRenderDirectRoutedIPv4(base,data)",patched)
+        self.assertIn("ceratoRenderDirectRoutedIPv4(base,data);",patched)
+        self.assertIn("row.mode==='routed-wg'",patched)
+        self.assertIn("Routages IPv4 directs",patched)
+        self.assertIn("Routage complet /32 · WireGuard",patched)
+        self.assertIn("sans publication NAT par port",patched)
+        self.assertIn("td.textContent=value",patched)
+        # No unsanitized HTML injection and no privileged mutation.
+        new_part=patched.split("function ceratoRenderDirectRoutedIPv4(base,data)",1)[1]
+        new_part=new_part.split("function ceratoEnhanceIPv4()",1)[0]
+        self.assertNotIn("innerHTML",new_part)
+        self.assertNotIn("fetch(",new_part)
+        self.assertNotIn("nat-add",new_part)
+        self.assertNotIn("nft",new_part)
+        self.assertNotIn("ctl(",new_part)
+        self.assertEqual(patched.count("id='cerato-direct-routed-ipv4'"),0)
+
     def test_reject_missing_auth_or_already_patched(self):
         with self.assertRaises(LiveUIError):
             patch_backend(SERVER.replace("if not self.check_session(write=True):return",
