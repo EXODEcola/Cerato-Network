@@ -124,6 +124,11 @@ def updater_status():
         raise LockRepairError("Statut updater non objet")
     return data
 
+def _trusted_dir(path:Path):
+    info=path.stat()
+    return info.st_uid==0 and not info.st_mode & (stat.S_IWGRP|stat.S_IWOTH)
+
+
 def install_dropin():
     if DROPIN.is_symlink():
         raise LockRepairError("Drop-in systemd symbolique : refus")
@@ -135,7 +140,7 @@ def install_dropin():
     if directory.is_symlink():
         raise LockRepairError("Dossier drop-in symbolique : refus")
     directory.mkdir(mode=0o755,parents=True,exist_ok=True)
-    if directory.stat().st_uid!=0 or directory.stat().st_mode & (stat.S_IWGRP|stat.S_IWOTH):
+    if not _trusted_dir(directory):
         raise LockRepairError("Dossier drop-in non approuvé")
     # O_EXCL prevents overwriting a different file created after preflight.
     fd=os.open(DROPIN,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
