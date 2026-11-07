@@ -102,13 +102,18 @@ def root_owned_venv(folder:Path)->bool:
     return info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o755
 
 
+def trusted_venv_config(config:Path)->bool:
+    return (not config.is_symlink() and config.is_file()
+            and config.stat().st_uid==0)
+
+
 def check_runtime(folder:Path):
     if folder.is_symlink() or not folder.is_dir():
         raise RuntimePreparationError("Environnement Python absent ou symbolique")
     if not root_owned_venv(folder):
         raise RuntimePreparationError("Permissions de l'environnement incorrectes")
     config=folder/"pyvenv.cfg"
-    if config.is_symlink() or not config.is_file() or config.stat().st_uid!=0:
+    if not trusted_venv_config(config):
         raise RuntimePreparationError("Configuration du venv non approuvée")
     if "include-system-site-packages = false" not in config.read_text().lower():
         raise RuntimePreparationError("Le venv ne doit pas inclure les paquets système")
