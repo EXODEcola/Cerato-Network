@@ -92,17 +92,17 @@ class PrivateRunnerTests(unittest.TestCase):
     def test_error_metadata_is_strictly_sanitized(self):
         private = "PRIVATE_PASSWORD_AND_MFA_SEED_DO_NOT_PRINT"
         stderr = (
-            "Traceback: " + private + "\\n"
-            "CERATO_TEST_STAGE=temporary-database\\n"
-            "CERATO_TEST_ERROR=PermissionError\\n"
+            "Traceback: " + private + "\n"
+            "CERATO_TEST_STAGE=temporary-database\n"
+            "CERATO_TEST_ERROR=PermissionError\n"
         )
         self.assertEqual(
             runner.error_phase("",stderr),
             ("temporary-database","PermissionError"),
         )
         self.assertEqual(
-            runner.error_phase("", "CERATO_TEST_STAGE="+private+"\\n"+
-                 "CERATO_TEST_ERROR=ConnectionError\\n"),
+            runner.error_phase("", "CERATO_TEST_STAGE="+private+"\n"+
+                 "CERATO_TEST_ERROR=ConnectionError\n"),
             ("unknown","unknown"),
         )
 
@@ -111,9 +111,9 @@ class PrivateRunnerTests(unittest.TestCase):
         with ExitStack() as stack:
             mocks=[stack.enter_context(x) for x in self._setup(exit_code=1)]
             mocks[7].return_value.stderr=(
-                "private-secret-never-echo\\n"
-                "CERATO_TEST_STAGE=owner-mfa\\n"
-                "CERATO_TEST_ERROR=AssertionError\\n"
+                "private-secret-never-echo\n"
+                "CERATO_TEST_STAGE=owner-mfa\n"
+                "CERATO_TEST_ERROR=AssertionError\n"
             )
             with self.assertRaises(runner.SandboxError) as cm:
                 runner.run()
