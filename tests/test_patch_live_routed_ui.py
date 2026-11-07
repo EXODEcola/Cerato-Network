@@ -132,7 +132,8 @@ class LegacyRoutedUIIntegrationTests(unittest.TestCase):
         self.assertNotIn("nat-add",new_part)
         self.assertNotIn("nft",new_part)
         self.assertNotIn("ctl(",new_part)
-        self.assertEqual(patched.count("id='cerato-direct-routed-ipv4'"),0)
+        self.assertIn("const panel=document.createElement('section');",new_part)
+        self.assertIn("panel.id='cerato-direct-routed-ipv4';",new_part)
 
     def test_reject_missing_auth_or_already_patched(self):
         with self.assertRaises(LiveUIError):
