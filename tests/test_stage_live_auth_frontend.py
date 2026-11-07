@@ -20,6 +20,7 @@ class Handler:
     def do_POST(self): return None
 """
 APP=b"""let live={};
+const screens=['overview','ips','machines','nat','firewall','topology','logs','settings','updates'];
 function updates(){return 'Release update';}
 function bind(){return true;}
 function overview(){return 'Dashboard';}
@@ -64,6 +65,7 @@ class StageNativeLoginTests(unittest.TestCase):
             js=(output/"web/app.js").read_text(encoding="utf8")
             css=(output/"web/style.css").read_text(encoding="utf8")
             self.assertIn(MARKER,js)
+            self.assertIn("CERATO_LEGACY_NAV_PERSISTENCE_V1",js)
             self.assertIn("function overview(){",js)
             self.assertIn("function nat(){",js)
             self.assertIn("endpoint+'mfa/verify'",js)
