@@ -1,0 +1,29 @@
+name: Cerato Network - Prerequis de connexion native 8787
+on:
+  push:
+    branches: [feature/native-auth-8787-host-prereqs]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dépendances des tests
+        run: python3 -m pip install -r security/requirements.txt
+      - name: Analyse et tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations security gateway network updates tests
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
+          node tests/test_frontend_navigation.cjs
+          node tests/test_native_auth_transport.cjs
