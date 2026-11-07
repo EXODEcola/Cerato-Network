@@ -1,0 +1,30 @@
+name: Cerato Network - Diagnostic UI IPv4 sans modification
+
+on:
+  push:
+    branches: [diagnostics/live-ipv4-ui-v011]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Tests de lecture des allocations IPv4 et verifications anonymisees
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Syntaxe et tests complets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q network integrations tools tests updates
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
