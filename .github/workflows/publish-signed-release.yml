@@ -20,7 +20,7 @@ on:
         required: true
         type: choice
         default: css
-        options: [css, routed-ui]
+        options: [css, routed-ui, nat-ui]
       from_version:
         description: "Version OVH cible, ex. v0.0.0"
         required: true
@@ -68,7 +68,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            [[ "$REQUEST_KIND" == "css" || "$REQUEST_KIND" == "routed-ui" ]]
+            [[ "$REQUEST_KIND" == "css" || "$REQUEST_KIND" == "routed-ui" || "$REQUEST_KIND" == "nat-ui" ]]
             [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
             [[ "$REQUEST_FROM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
             if [[ "$REQUEST_CHANNEL" == "beta" ]]; then
@@ -136,6 +136,10 @@ jobs:
                 --patch integrations/patch_live_routed_ui.py \
                 --model network/routed_ui_status.py \
                 --destination "$OUT/source/live-overlay" --from-version "$FROM"
+            elif [[ "$REQUEST_KIND" == "nat-ui" ]]; then
+              python3 tools/compose_nat_routed_readout_release.py \
+                --source release-assets/routed-nat-panel.js \
+                --destination "$OUT/source/live-overlay" --from-version "$FROM"
             else
               python3 tools/compose_css_release.py \
                 --source release-assets/graphite-operations.css \
@@ -173,6 +177,11 @@ jobs:
             if [[ "$REQUEST_KIND" == "routed-ui" ]]; then
               options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION" --notes "Correctif IPv4 routée signé : autorisation du patcher local approuvé, sans source backend historique." --latest=false)
               [[ "$CHANNEL" == "stable" ]] || options+=(--prerelease)
+            fi
+            if [[ "$REQUEST_KIND" == "nat-ui" ]]; then
+              options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION"
+                       --notes "Affichage signé en lecture seule des IPv4 routées dans NAT & publications. Ne modifie aucune règle NAT, WireGuard ou serveur."
+                       --latest=false --prerelease)
             fi
             gh release create "$VERSION" \
               "$OUT/release/manifest.json" "$OUT/release/manifest.sig" \
