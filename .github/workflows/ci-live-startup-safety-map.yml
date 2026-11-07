@@ -1,0 +1,31 @@
+name: Cerato Network - Audit de démarrage privé en lecture seule
+
+on:
+  push:
+    branches: [feature/legacy-live-startup-safety-map]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Profil démarrage et tests complets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations security tests gateway network updates tools
+          python3 -m unittest tests.test_private_live_startup_map -v
+          python3 -m unittest tests.test_private_live_http_boundary -v
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node tests/test_native_auth_transport.cjs
+          node tests/test_frontend_navigation.cjs
