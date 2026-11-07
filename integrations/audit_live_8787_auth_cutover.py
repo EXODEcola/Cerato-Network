@@ -173,7 +173,7 @@ def analyze(backend:bytes,frontend:bytes,styles:bytes):
         "routed_ipv4_api_present":"/api/ip/allocations" in strings,
         "routed_nat_guard_present":"cerato_reject_routed_nat(" in backend_text,
         "frontend":frontend_markers,
-        "legacy_fetch_transport_detected":bool(re.search(r"\\bfetch\\s*\\(",js)),
+        "legacy_fetch_transport_detected":bool(re.search(r"\bfetch\s*\(",js)),
         "legacy_xhr_transport_detected":"XMLHttpRequest" in js,
         "legacy_js_csrf_header_present":"X-Cerato-CSRF" in js,
         "frontend_sections":sections,
