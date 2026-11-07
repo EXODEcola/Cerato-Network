@@ -46,6 +46,8 @@ for rel in "${RELS[@]}"; do
 done
 grep -q 'ROUTED_SCHEMA=' "$ROOT/updates/live_controller.py"
 grep -q 'ROUTED_SCHEMA=' "$ROOT/tools/stage_signed_static_release.py"
+grep -q 'NAT_UI_SCHEMA=' "$ROOT/updates/live_controller.py"
+grep -q 'NAT_UI_SCHEMA=' "$ROOT/tools/stage_signed_static_release.py"
 grep -q 'def stage(' "$ROOT/integrations/patch_live_routed_ui.py"
 grep -q 'def summarize(' "$ROOT/network/routed_ui_status.py"
 "$WRAPPER" status | python3 -c 'import json,sys; assert "installed_version" in json.load(sys.stdin)'
