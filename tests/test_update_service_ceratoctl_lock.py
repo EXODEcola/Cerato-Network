@@ -50,6 +50,7 @@ class ScopedLockTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/"override"/"60-lock.conf"
             with patch.object(lockfix,"DROPIN",path), \
+                 patch.object(lockfix,"_trusted_dir",return_value=True), \
                  patch.object(lockfix,"command",return_value=SimpleNamespace(returncode=0)), \
                  patch.object(lockfix,"unit_state",return_value={
                      "ReadWritePaths":lockfix.SANDBOX_WRITABLE}):
