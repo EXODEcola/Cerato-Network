@@ -28,5 +28,6 @@ jobs:
           python3 -m compileall -q gateway network security tools scripts integrations tests updates
           python3 -m unittest discover -s tests -p 'test_*.py' -q
           node --check web/app.js
+          node tests/test_frontend_navigation.cjs
           node --check web/live-auth-overlay.js
           node --check release-assets/routed-nat-panel.js
