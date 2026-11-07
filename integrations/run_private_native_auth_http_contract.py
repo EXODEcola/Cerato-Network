@@ -44,6 +44,17 @@ DIAGNOSTIC_STAGES=frozenset((
     "viewer-redaction","account-list","legacy-login-rejection",
     "complete",
 ))
+DIAGNOSTIC_MODULES=frozenset((
+    "argon2","argon2.exceptions","argon2._password_hasher",
+    "cryptography","cryptography.hazmat","cryptography.hazmat.primitives",
+    "cryptography.hazmat.primitives.ciphers",
+    "cryptography.hazmat.primitives.ciphers.aead",
+    "cffi","_cffi_backend","typing_extensions",
+    "mfa","secretbox","auth_store","legacy_auth_api",
+    "legacy_policy","live_session_guard","live_http_bridge",
+    "sqlite3","_sqlite3","http","http.cookies","urllib",
+    "dataclasses",
+))
 DIAGNOSTIC_ERRORS=frozenset((
     "AssertionError","PermissionError","FileNotFoundError","OSError",
     "RuntimeError","ValueError","TypeError","ImportError",
@@ -58,7 +69,9 @@ def error_phase(stdout:str,stderr:str):
     found_type=re.findall(r"(?m)^CERATO_TEST_ERROR=([A-Za-z][A-Za-z0-9]{0,55})$",stderr[:16000])
     phase=found_phase[-1] if found_phase and found_phase[-1] in DIAGNOSTIC_STAGES else "unknown"
     error=found_type[-1] if found_type and found_type[-1] in DIAGNOSTIC_ERRORS else "unknown"
-    return phase,error
+    found_module=re.findall(r"(?m)^CERATO_TEST_MODULE=([A-Za-z_][A-Za-z0-9_.]{0,95})$",stderr[:16000])
+    missing=found_module[-1] if found_module and found_module[-1] in DIAGNOSTIC_MODULES else "unknown"
+    return phase,error,missing
 
 def verified_candidate():
     trusted_staging_root(BACKUPS,owner=0)
@@ -132,10 +145,12 @@ def run():
         )
         if result.returncode:
             # Never forward potentially private tracebacks to the operator.
-            phase,error=error_phase(result.stdout,result.stderr)
+            phase,error,missing=error_phase(result.stdout,result.stderr)
             raise SandboxError(
                 "Tests HTTP/MFA isolés refusés : étape="+phase+
-                ", type="+error+". Aucun compte actif modifié")
+                ", type="+error+
+                (", module_manquant="+missing if error=="ModuleNotFoundError" else "")+
+                ". Aucun compte actif modifié")
         try:
             payload=json.loads(result.stdout)
         except ValueError as exc:
