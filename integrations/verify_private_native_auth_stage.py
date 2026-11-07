@@ -66,11 +66,11 @@ def safe_directory(path:Path,*,owner:int,mode:int):
 def digest(raw:bytes):
     return hashlib.sha256(raw).hexdigest()
 
-def trusted_staging_root(root:Path=BACKUPS):
+def trusted_staging_root(root:Path=BACKUPS,*,owner:int=0):
     if root.is_symlink() or not root.is_dir():
         raise VerificationError("Racine des sauvegardes absente ou symbolique")
     entry=root.stat()
-    if entry.st_uid!=0 or entry.st_mode & (stat.S_IWGRP|stat.S_IWOTH):
+    if entry.st_uid!=owner or entry.st_mode & (stat.S_IWGRP|stat.S_IWOTH):
         raise VerificationError("Racine des sauvegardes non fiable")
 
 def check_one(candidate:Path,*,live=LIVE,repo=TRUSTED_ROOT,owner=0,pinned=EXPECTED):
@@ -159,7 +159,7 @@ def storage_state():
 
 def inspect(*,root=BACKUPS,live=LIVE,repo=TRUSTED_ROOT,
             pinned=EXPECTED,owner=0):
-    trusted_staging_root(root)
+    trusted_staging_root(root,owner=owner)
     eligible=[]
     for candidate in root.glob(ALLOWED_STAGE_PREFIX+"*"):
         # Never follow symbolic links or entries outside the approved root.
