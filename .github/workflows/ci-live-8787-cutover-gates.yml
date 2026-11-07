@@ -29,3 +29,4 @@ jobs:
           node --check web/app.js
           node tests/test_frontend_navigation.cjs
           node --check web/live-auth-overlay.js
+          node tests/test_native_auth_transport.cjs
