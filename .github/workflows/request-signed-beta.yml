@@ -1,0 +1,58 @@
+name: Cerato Network - Demande automatique beta signee
+
+# A reviewed request commit dispatches the existing PROTECTED signing workflow.
+# No signing keys or deployment permissions are present in this job.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release-requests/current-beta.json'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: cerato-network-beta-publication-request
+  cancel-in-progress: false
+
+jobs:
+  request:
+    name: Declencher la publication signee depuis GitHub
+    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'EXODEcola/Cerato-Network' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Valider la demande versionnee
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          python3 tools/check_beta_release_request.py \
+            --request release-requests/current-beta.json > "$RUNNER_TEMP/beta-request.out"
+          cat "$RUNNER_TEMP/beta-request.out" >> "$GITHUB_OUTPUT"
+      - name: Envoyer au signataire protege
+        env:
+          VERSION: ${{ steps.request.outputs.version }}
+          FROM_VERSION: ${{ steps.request.outputs.from_version }}
+          CHANNEL: ${{ steps.request.outputs.channel }}
+          RELEASE_KIND: ${{ steps.request.outputs.release_kind }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CHANNEL" == beta && "$RELEASE_KIND" == routed-ui ]]
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[1-9][0-9]*$ ]]
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "La release existe déjà : refus du nouveau déclenchement" >&2
+            exit 1
+          fi
+          gh workflow run publish-signed-release.yml --ref main \
+            -f "version=$VERSION" -f "channel=beta" \
+            -f "release_kind=routed-ui" -f "from_version=$FROM_VERSION"
+          echo "Demande transmise au workflow de signature Ed25519 protégé."
