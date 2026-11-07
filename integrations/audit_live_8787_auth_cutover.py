@@ -91,7 +91,7 @@ def systemd_status():
         "private_tmp":options.get("PrivateTmp")=="yes",
         "no_new_privileges":options.get("NoNewPrivileges")=="yes",
         "trusted_https_origin_declared":bool(re.search(
-            r"(?:^|\\s)CERATO_WEB_ORIGIN=https://",options.get("Environment",""))),
+            r"(?:^|\s)CERATO_WEB_ORIGIN=https://",options.get("Environment",""))),
         "auth_storage_write_scope":
             "/var/lib/cerato-network-auth" in paths,
         "service_active":bool(
