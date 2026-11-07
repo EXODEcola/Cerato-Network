@@ -1,0 +1,26 @@
+name: Cerato Network - UI routage sans NAT par port
+
+on:
+  push:
+    branches: [fix/route-only-remove-nat-legacy-ui]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node tests/test_frontend_navigation.cjs
