@@ -14,7 +14,7 @@ on:
         required: true
         default: beta
         type: choice
-        options: [dev, beta, stable]
+        options: [beta, stable]
       release_kind:
         description: "Type de release à signer"
         required: true
@@ -30,7 +30,6 @@ on:
     # Signed indexes expire after seven days. Attempt renewal every four days
     # (every Sunday / Wednesday); environment approvals may delay the job.
     - cron: "23 4 * * 0,3" # beta
-    - cron: "28 4 * * 0,3" # dev
 
 concurrency:
   group: cerato-network-signing
@@ -52,7 +51,6 @@ jobs:
       REQUEST_CHANNEL: ${{ inputs.channel }}
       REQUEST_FROM_VERSION: ${{ inputs.from_version }}
       REQUEST_KIND: ${{ inputs.release_kind }}
-      SCHEDULE_ENTRY: ${{ github.event.schedule }}
     steps:
       - name: Checkout du commit main approuve
         uses: actions/checkout@v4
@@ -71,11 +69,9 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             [[ "$REQUEST_KIND" == "css" || "$REQUEST_KIND" == "routed-ui" ]]
-            [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((dev|beta|rc)\.[0-9]+))?$ ]]
+            [[ "$REQUEST_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
             [[ "$REQUEST_FROM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((beta|rc)\.[0-9]+))?$ ]]
-            if [[ "$REQUEST_CHANNEL" == "dev" ]]; then
-              [[ "$REQUEST_VERSION" == *-dev.* ]]
-            elif [[ "$REQUEST_CHANNEL" == "beta" ]]; then
+            if [[ "$REQUEST_CHANNEL" == "beta" ]]; then
               [[ "$REQUEST_VERSION" == *-beta.* ]]
             else
               [[ "$REQUEST_VERSION" != *-* ]]
@@ -114,15 +110,11 @@ jobs:
           KEY="$RUNNER_TEMP/cerato-trust/signing.key"
           PUB="$RUNNER_TEMP/cerato-trust/release-verification.pub"
           if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
-            if [[ "$SCHEDULE_ENTRY" == "28 4 * * 0,3" ]]; then
-              CHANNEL=dev
-            else
-              CHANNEL=beta
-            fi
-            VERSION="$(gh release list --limit 80 --json tagName,isPrerelease,isDraft \
-              -q "[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test(\"^v[0-9]+\\\\.[0-9]+\\\\.[0-9]+-${CHANNEL}\\\\.[0-9]+$\"))] | first // \"\"")"
+            CHANNEL=beta
+            VERSION="$(gh release list --limit 40 --json tagName,isPrerelease,isDraft \
+              -q '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$"))] | first // ""')"
             if [[ -z "$VERSION" ]]; then
-              echo "Aucune release $CHANNEL signee a renouveler."
+              echo "Aucune beta signee a renouveler."
               echo "CERATO_NO_RELEASE=true" >> "$GITHUB_ENV"
               exit 0
             fi
@@ -177,7 +169,7 @@ jobs:
             options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION"
                      --notes "Release Graphite CSS signee Ed25519. Aucun backend ni JavaScript remplace."
                      --latest=false)
-            if [[ "$CHANNEL" == "beta" || "$CHANNEL" == "dev" ]]; then options+=(--prerelease); fi
+            if [[ "$CHANNEL" == "beta" ]]; then options+=(--prerelease); fi
             if [[ "$REQUEST_KIND" == "routed-ui" ]]; then
               options=(--target "$GITHUB_SHA" --title "Cerato Network $VERSION" --notes "Correctif IPv4 routée signé : autorisation du patcher local approuvé, sans source backend historique." --latest=false)
               [[ "$CHANNEL" == "stable" ]] || options+=(--prerelease)
