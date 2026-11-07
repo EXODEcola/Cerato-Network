@@ -13,8 +13,20 @@ from pathlib import Path
 import sys
 import time
 
-# Emits ONLY an approved phase identifier and exception class on failure.
+# Emits ONLY an approved phase identifier, exception class and (for a
+# ModuleNotFoundError) an exact allowlisted public module name on failure.
 # Never expose traceback values, database contents, passwords or MFA seeds.
+_MISSING_MODULE_ALLOWLIST=frozenset((
+    "argon2","argon2.exceptions","argon2._password_hasher",
+    "cryptography","cryptography.hazmat","cryptography.hazmat.primitives",
+    "cryptography.hazmat.primitives.ciphers",
+    "cryptography.hazmat.primitives.ciphers.aead",
+    "cffi","_cffi_backend","typing_extensions",
+    "mfa","secretbox","auth_store","legacy_auth_api",
+    "legacy_policy","live_session_guard","live_http_bridge",
+    "sqlite3","_sqlite3","http","http.cookies","urllib",
+    "dataclasses",
+))
 _STAGE = "startup"
 def mark(phase):
     global _STAGE
@@ -261,4 +273,6 @@ if __name__=="__main__":
         # Purely diagnostic metadata: never echo exception messages.
         print("CERATO_TEST_STAGE="+_STAGE,file=sys.stderr)
         print("CERATO_TEST_ERROR="+type(exc).__name__,file=sys.stderr)
+        if isinstance(exc,ModuleNotFoundError) and exc.name in _MISSING_MODULE_ALLOWLIST:
+            print("CERATO_TEST_MODULE="+exc.name,file=sys.stderr)
         sys.exit(1)

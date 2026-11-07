@@ -98,13 +98,31 @@ class PrivateRunnerTests(unittest.TestCase):
         )
         self.assertEqual(
             runner.error_phase("",stderr),
-            ("temporary-database","PermissionError"),
+            ("temporary-database","PermissionError","unknown"),
         )
         self.assertEqual(
             runner.error_phase("", "CERATO_TEST_STAGE="+private+"\n"+
                  "CERATO_TEST_ERROR=ConnectionError\n"),
-            ("unknown","unknown"),
+            ("unknown","unknown","unknown"),
         )
+
+    def test_allowed_missing_module_is_reported_without_arbitrary_paths(self):
+        stderr=(
+            "private.password=SECRET_NOT_FOR_OPERATOR\n"
+            "CERATO_TEST_STAGE=module-import\n"
+            "CERATO_TEST_ERROR=ModuleNotFoundError\n"
+            "CERATO_TEST_MODULE=auth_store\n"
+        )
+        self.assertEqual(runner.error_phase("",stderr),
+                         ("module-import","ModuleNotFoundError","auth_store"))
+        self.assertEqual(runner.error_phase(
+            "","CERATO_TEST_STAGE=module-import\n"
+            "CERATO_TEST_ERROR=ModuleNotFoundError\n"
+            "CERATO_TEST_MODULE=private_unknown_host_path\n"),
+            ("module-import","ModuleNotFoundError","unknown"))
+        self.assertEqual(runner.error_phase(
+            "","CERATO_TEST_MODULE=../../etc/shadow\n"),
+            ("unknown","unknown","unknown"))
 
     def test_child_failure_returns_only_phase_and_type(self):
         from contextlib import ExitStack
@@ -121,6 +139,23 @@ class PrivateRunnerTests(unittest.TestCase):
             self.assertIn("étape=owner-mfa",message)
             self.assertIn("type=AssertionError",message)
             self.assertNotIn("private-secret-never-echo",message)
+            self.assertEqual(mocks[8].call_count,1)
+
+    def test_child_missing_dependency_is_the_only_extra_output(self):
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            mocks=[stack.enter_context(x) for x in self._setup(exit_code=1)]
+            mocks[7].return_value.stderr=(
+                "SECRET_HOST_PRIVATE_TRACEBACK\n"
+                "CERATO_TEST_STAGE=module-import\n"
+                "CERATO_TEST_ERROR=ModuleNotFoundError\n"
+                "CERATO_TEST_MODULE=cryptography\n"
+            )
+            with self.assertRaises(runner.SandboxError) as cm:
+                runner.run()
+            msg=str(cm.exception)
+            self.assertIn("module_manquant=cryptography",msg)
+            self.assertNotIn("SECRET_HOST_PRIVATE_TRACEBACK",msg)
             self.assertEqual(mocks[8].call_count,1)
 
     def test_unusable_crypto_fails_before_privileged_work(self):

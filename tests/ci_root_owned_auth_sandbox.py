@@ -45,8 +45,12 @@ def run():
         storage.mkdir(mode=0o700)
         os.chown(storage,user.pw_uid,user.pw_gid)
         os.chmod(storage,0o700)
+        # Exercise a real isolated venv, not the Actions/system Python.
+        binary=os.environ.get("CERATO_AUTH_CI_PYTHON",sys.executable)
+        if not Path(binary).is_file():
+            raise RuntimeError("Python de test isolé absent")
         command=[
-            "/usr/sbin/runuser","-u",user.pw_name,"--",sys.executable,
+            "/usr/sbin/runuser","-u",user.pw_name,"--",binary,
             "-I",str(script),str(security),str(storage)
         ]
         p=subprocess.run(command,capture_output=True,text=True,timeout=110)
