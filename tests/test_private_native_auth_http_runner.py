@@ -108,20 +108,20 @@ class PrivateRunnerTests(unittest.TestCase):
 
     def test_allowed_missing_module_is_reported_without_arbitrary_paths(self):
         stderr=(
-            "private.password=SECRET_NOT_FOR_OPERATOR\\n"
-            "CERATO_TEST_STAGE=module-import\\n"
-            "CERATO_TEST_ERROR=ModuleNotFoundError\\n"
-            "CERATO_TEST_MODULE=auth_store\\n"
+            "private.password=SECRET_NOT_FOR_OPERATOR\n"
+            "CERATO_TEST_STAGE=module-import\n"
+            "CERATO_TEST_ERROR=ModuleNotFoundError\n"
+            "CERATO_TEST_MODULE=auth_store\n"
         )
         self.assertEqual(runner.error_phase("",stderr),
                          ("module-import","ModuleNotFoundError","auth_store"))
         self.assertEqual(runner.error_phase(
-            "","CERATO_TEST_STAGE=module-import\\n"
-            "CERATO_TEST_ERROR=ModuleNotFoundError\\n"
-            "CERATO_TEST_MODULE=private_unknown_host_path\\n"),
+            "","CERATO_TEST_STAGE=module-import\n"
+            "CERATO_TEST_ERROR=ModuleNotFoundError\n"
+            "CERATO_TEST_MODULE=private_unknown_host_path\n"),
             ("module-import","ModuleNotFoundError","unknown"))
         self.assertEqual(runner.error_phase(
-            "","CERATO_TEST_MODULE=../../etc/shadow\\n"),
+            "","CERATO_TEST_MODULE=../../etc/shadow\n"),
             ("unknown","unknown","unknown"))
 
     def test_child_failure_returns_only_phase_and_type(self):
@@ -146,10 +146,10 @@ class PrivateRunnerTests(unittest.TestCase):
         with ExitStack() as stack:
             mocks=[stack.enter_context(x) for x in self._setup(exit_code=1)]
             mocks[7].return_value.stderr=(
-                "SECRET_HOST_PRIVATE_TRACEBACK\\n"
-                "CERATO_TEST_STAGE=module-import\\n"
-                "CERATO_TEST_ERROR=ModuleNotFoundError\\n"
-                "CERATO_TEST_MODULE=cryptography\\n"
+                "SECRET_HOST_PRIVATE_TRACEBACK\n"
+                "CERATO_TEST_STAGE=module-import\n"
+                "CERATO_TEST_ERROR=ModuleNotFoundError\n"
+                "CERATO_TEST_MODULE=cryptography\n"
             )
             with self.assertRaises(runner.SandboxError) as cm:
                 runner.run()
