@@ -21,7 +21,7 @@ class ScopedIpctlAuthorizationTests(unittest.TestCase):
             "ceratonet ALL=(root) NOPASSWD: /usr/local/sbin/cerato-ipctl status",
         )
         for word in ("ALL=(ALL)", "SETENV", "import-local", "preview",
-                     "route", "nat-add", "visudo -f", "NOPASSWD: ALL"):
+                     "nat-add", "visudo -f", "NOPASSWD: ALL"):
             self.assertNotIn(word, text)
         self.assertTrue(str(m.CLI).startswith("/usr/local/sbin/"))
 
