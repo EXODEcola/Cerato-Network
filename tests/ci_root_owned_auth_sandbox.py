@@ -30,11 +30,11 @@ def run():
         # Deliberately give these public-source files a group OTHER than
         # the service account: imports must not rely on Linux group mapping.
         os.chown(sandbox,0,0)
-        os.chmod(sandbox,0o711)
+        os.chmod(sandbox,0o755)
         security=sandbox/"security"
         security.mkdir(mode=0o700)
         os.chown(security,0,0)
-        os.chmod(security,0o711)
+        os.chmod(security,0o755)
         script=sandbox/"run-contract.py"
         for p in SECURITY:
             target=security/p
@@ -45,8 +45,8 @@ def run():
         os.chown(script,0,user.pw_gid)
         os.chmod(script,0o640)
         # Only the disposable test database is writable by the test identity.
-        assert (sandbox.stat().st_mode & 0o777)==0o711
-        assert (security.stat().st_mode & 0o777)==0o711
+        assert (sandbox.stat().st_mode & 0o777)==0o755
+        assert (security.stat().st_mode & 0o777)==0o755
         assert user.pw_gid!=0
         storage=sandbox/"test-only-db"
         storage.mkdir(mode=0o700)
