@@ -87,6 +87,24 @@ class PrivateCurrentStageTests(unittest.TestCase):
             # The candidate remains PRIVATE, never a distributable build.
             self.assertNotIn(SECRET,(private/"manifest.json").read_text())
 
+    def test_explicit_fingerprints_match_approved_audit_only(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            live,backups=self.fixture(root)
+            sha={
+                "backend":hashlib.sha256((live/"backend/server.py").read_bytes()).hexdigest(),
+                "frontend":hashlib.sha256((live/"web/app.js").read_bytes()).hexdigest(),
+                "css":hashlib.sha256((live/"web/style.css").read_bytes()).hexdigest(),
+            }
+            incorrect={**sha,"backend":"f"*64}
+            with self.assertRaisesRegex(PrivateStageError,"différentes"):
+                stage_candidate(live,backups=backups,expected_hashes=incorrect)
+            self.assertEqual(list(backups.iterdir()),[])
+            result=stage_candidate(live,backups=backups,expected_hashes=sha)
+            self.assertEqual(result["result"],"staged_inactive")
+            self.assertFalse(result["production_modified"])
+            self.assertTrue(Path(result["private_directory"]).is_dir())
+
     def test_unknown_api_route_refuses_staging_without_creating_files(self):
         with tempfile.TemporaryDirectory() as t:
             live,backups=self.fixture(Path(t))
