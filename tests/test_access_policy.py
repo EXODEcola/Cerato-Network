@@ -36,7 +36,7 @@ class GatewayPolicyTests(unittest.TestCase):
         s = self.viewer_s
         actor = authorize(self.store, s["session"], "GET", "/api/status")
         self.assertEqual(actor["role"], "user")
-        for route in ("/api/events", "/api/wg-config", "/api/nft-preview", "/api/accounts", "/api/updates"):
+        for route in ("/api/events", "/api/wg-config", "/api/nft-preview", "/api/accounts", "/api/updates", "/api/ip/allocations"):
             with self.assertRaises(Forbidden):
                 authorize(self.store, s["session"], "GET", route)
 
