@@ -27,8 +27,15 @@ class GraphiteContractTests(unittest.TestCase):
     def test_dev_console_also_uses_same_graphite_operations_theme(self):
         theme=(ROOT/"themes/cerato-graphite.css").read_text(encoding="utf8")
         combined=(ROOT/"web/style.css").read_text(encoding="utf8")
-        self.assertIn(theme,combined)
-        self.assertTrue(combined.index("CERATO NETWORK — Graphite Operations")>combined.index(":root{"))
+        # Unified standalone UI reuses the graphite operational palette
+        # without concatenating the legacy theme into the modern design.
+        self.assertIn("--bg:#101316",combined)
+        self.assertIn("--panel:#1c2125",combined)
+        self.assertIn("--accent:#86b6a4",combined)
+        self.assertIn(".route-summary",combined)
+        self.assertIn(".auth-layout",combined)
+        self.assertNotIn("#358dde",combined.lower())
+        self.assertNotIn("linear-gradient(",combined.lower())
 
     def test_update_screen_has_real_states_and_no_fake_download_action(self):
         for content in ("u.configured","u.installable","reason_code",

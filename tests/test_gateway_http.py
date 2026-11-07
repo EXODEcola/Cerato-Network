@@ -110,6 +110,12 @@ class GatewayHTTPTests(unittest.TestCase):
         self.assertEqual(len(body["recovery_codes"]),8)
         owner_cookie=headers["Set-Cookie"].split(";",1)[0]
         owner_csrf=body["csrf"]
+        # The development auth-only fixture cannot read production IP status.
+        # Authorized owners get a safe 503 rather than fabricated assignments.
+        status,body,_ = self.request(
+            "GET","/api/ip/allocations",cookie=owner_cookie)
+        self.assertEqual(status,503)
+        self.assertNotIn("managed",body)
 
         status,_,_ = self.request("POST","/api/accounts",{
             "email":"viewer@example.org","password":"read-only-password-123","role":"user"},
@@ -138,6 +144,9 @@ class GatewayHTTPTests(unittest.TestCase):
         for sensitive in ("peers","gateway_public_key","pool","wan_ips","publications"):
             self.assertNotIn(sensitive,body)
         status,_,_ = self.request("GET","/api/accounts",cookie=viewer_cookie)
+        self.assertEqual(status,403)
+        status,_,_ = self.request(
+            "GET","/api/ip/allocations",cookie=viewer_cookie)
         self.assertEqual(status,403)
         status,_,_ = self.request("POST","/api/updates/install",{},
                                   cookie=viewer_cookie,csrf=viewer_csrf)
