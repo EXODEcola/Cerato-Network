@@ -39,6 +39,32 @@
     if(!response.ok)throw Error(data.error||('Erreur HTTP '+response.status));
     return data;
   }
+  // Preserve legacy network mutations while the server enforces the native
+  // same-origin cookie, role and CSRF checks. Scoped to same-origin /api/*
+  // writes only. This remains inactive until the migration is approved.
+  let transportInstalled=false;
+  function installNativeTransport(){
+    if(transportInstalled || !state.account || !state.csrf)return;
+    const nativeFetch=window.fetch.bind(window);
+    window.fetch=function(input,init){
+      const opts=init||{};
+      const method=String(opts.method||input?.method||'GET').toUpperCase();
+      let url;
+      try{
+        const target=typeof input==='string'?input:input?.url;
+        if(typeof target==='string')url=new URL(target,window.location.href);
+      }catch(_){return nativeFetch(input,init);}
+      if(url && url.origin===window.location.origin &&
+        url.pathname.startsWith('/api/') &&
+        ['POST','PUT','PATCH','DELETE'].includes(method) && state.csrf){
+        const headers=new Headers(opts.headers||input?.headers||{});
+        if(!headers.has('X-Cerato-CSRF'))headers.set('X-Cerato-CSRF',state.csrf);
+        return nativeFetch(input,{...opts,headers,credentials:'same-origin'});
+      }
+      return nativeFetch(input,init);
+    };
+    transportInstalled=true;
+  }
   function overlay(heading,subtitle) {
     let root=document.getElementById(ROOT_ID);
     if(!root){root=element('div','cerato-auth-overlay');root.id=ROOT_ID;document.body.append(root);}
@@ -249,6 +275,7 @@
     try{
       const session=await call(endpoint+'me');
       state.account=session.account;state.csrf=session.csrf;
+      installNativeTransport();
       accessActions();
       const observer=new MutationObserver(accessActions);
       observer.observe(document.body,{subtree:true,childList:true});
