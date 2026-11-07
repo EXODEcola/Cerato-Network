@@ -49,7 +49,7 @@ class ReadonlyUiAuditTests(unittest.TestCase):
                 "<html><body><div id='app'></div><script src='/app.js'></script></body></html>")
             before={p.relative_to(root).as_posix():p.read_bytes()
                     for p in root.rglob("*") if p.is_file()}
-            def probe(command):
+            def probe(command,**kwargs):
                 if command[0].endswith("systemctl"):
                     return SimpleNamespace(returncode=0)
                 return SimpleNamespace(returncode=0,stdout=json.dumps(SAMPLE),stderr="")
