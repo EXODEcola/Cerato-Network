@@ -29,7 +29,8 @@ class PrivateStageError(ValueError):
     pass
 
 def stage_candidate(live:Path=BASE,*,backups:Path=BACKUPS,
-                    security_dir:Path=ROOT/"security")->dict:
+                    security_dir:Path=ROOT/"security",
+                    expected_hashes:dict[str,str]|None=None)->dict:
     live=Path(live)
     for sub in ("backend/server.py","web/app.js","web/style.css"):
         if (live/sub).is_symlink():
@@ -38,6 +39,18 @@ def stage_candidate(live:Path=BASE,*,backups:Path=BACKUPS,
     js=source(live/"web/app.js")
     css=source(live/"web/style.css")
     checked=analyze(backend,js,css)
+    if expected_hashes is not None:
+        keys={
+            "backend": "installed_backend_sha256",
+            "frontend": "installed_frontend_sha256",
+            "css": "installed_css_sha256",
+        }
+        if (set(expected_hashes)!=set(keys)
+                or any(checked[report_key]!=expected_hashes[name]
+                       for name,report_key in keys.items())):
+            raise PrivateStageError(
+                "Empreintes actives différentes de l'audit approuvé : "
+                "aucune préparation")
     if (not checked["http_handler_single_and_unmodified"]
             or not checked["netstate_function_present"]
             or checked["unknown_api_route_count"]
@@ -109,11 +122,22 @@ def stage_candidate(live:Path=BASE,*,backups:Path=BACKUPS,
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--stage",action="store_true",required=True)
+    parser.add_argument("--expected-backend-sha256",required=True)
+    parser.add_argument("--expected-frontend-sha256",required=True)
+    parser.add_argument("--expected-css-sha256",required=True)
     args=parser.parse_args()
     if os.geteuid()!=0:
         parser.error("Étape privée réservée à root sur OVH")
     try:
-        result=stage_candidate()
+        values={
+            "backend":args.expected_backend_sha256,
+            "frontend":args.expected_frontend_sha256,
+            "css":args.expected_css_sha256,
+        }
+        if any(len(value)!=64 or any(char not in "0123456789abcdef" for char in value)
+               for value in values.values()):
+            raise PrivateStageError("Empreintes SHA-256 attendues invalides")
+        result=stage_candidate(expected_hashes=values)
     except (PrivateStageError,CutoverAuditError,NativeAuthUIStageError,
             StageError,OSError,ValueError,UnicodeError) as exc:
         parser.error(str(exc))
