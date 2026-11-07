@@ -27,6 +27,31 @@ class GithubMirrorTests(unittest.TestCase):
         self.assertEqual(result[0],"v0.1.0-beta.1")
         self.assertIn("manifest.sig",result[1])
 
+    def test_ignores_unsigned_dev_release_and_selects_latest_beta(self):
+        data=json.loads(listing("v0.1.1-beta.1"))
+        data.insert(0, {
+            "tag_name":"v0.1.1-dev.1",
+            "draft":False,"prerelease":True,
+            "assets":[{"name":"cerato-network-source.tar.gz",
+                       "browser_download_url":"https://github.com/"+m.REPO+
+                       "/releases/download/v0.1.1-dev.1/cerato-network-source.tar.gz"}],
+        })
+        data.insert(0,{"tag_name":"not-a-version",
+                       "draft":False,"prerelease":True,"assets":[]})
+        data.append(json.loads(listing("v0.1.0-beta.1"))[0])
+        chosen=m.discover("beta",get=lambda url,limit:json.dumps(data).encode())
+        self.assertEqual(chosen[0],"v0.1.1-beta.1")
+        self.assertIn("/v0.1.1-beta.1/",chosen[1]["manifest.json"])
+
+    def test_malformed_dev_only_gives_no_beta_release(self):
+        data=[
+            {"tag_name":"v0.1.1-dev.1","draft":False,
+             "prerelease":True,"assets":[]},
+            {"tag_name":None,"draft":False,
+             "prerelease":True,"assets":[]},
+        ]
+        self.assertIsNone(m.discover("beta",get=lambda u,n:json.dumps(data).encode()))
+
     def test_refuses_arbitrary_external_download_url(self):
         data=json.loads(listing())
         data[0]["assets"][0]["browser_download_url"]="https://evil.invalid/manifest.json"
