@@ -33,14 +33,6 @@ ALLOWED_DISTS=frozenset({
     "argon2-cffi","argon2-cffi-bindings","cryptography","cffi","pycparser",
     "typing-extensions","pip","setuptools","wheel",
 })
-SMOKE=r"""
-import json
-import importlib.metadata as md
-import secrets
-from argon2 import PasswordHasher
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from packaging_not_needed import nop
-"""  # intentionally replaced with a standard-library-only smoke below
 SMOKE = r"""
 import json, importlib.metadata as md, secrets, re
 from argon2 import PasswordHasher
@@ -105,11 +97,15 @@ def ensure_host():
         raise RuntimePreparationError("Préparation du panneau existant incomplète")
     return state
 
+def root_owned_venv(folder:Path)->bool:
+    info=folder.stat()
+    return info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o755
+
+
 def check_runtime(folder:Path):
     if folder.is_symlink() or not folder.is_dir():
         raise RuntimePreparationError("Environnement Python absent ou symbolique")
-    meta=folder.stat()
-    if meta.st_uid!=0 or stat.S_IMODE(meta.st_mode)!=0o755:
+    if not root_owned_venv(folder):
         raise RuntimePreparationError("Permissions de l'environnement incorrectes")
     config=folder/"pyvenv.cfg"
     if config.is_symlink() or not config.is_file() or config.stat().st_uid!=0:
@@ -210,7 +206,13 @@ def install():
             raise RuntimePreparationError("Environnement apparu pendant le staging")
         # Atomic rename within the same root-owned /opt/cerato-network.
         os.rename(temp,DEST)
-        result=check_runtime(DEST)
+        try:
+            result=check_runtime(DEST)
+        except BaseException:
+            # Never leave an unverified newly created runtime behind.
+            if DEST.is_dir() and not DEST.is_symlink():
+                shutil.rmtree(DEST)
+            raise
         return {"status":"runtime_ready_inactive",
                 "runtime_created":True,"runtime":result,
                 "usable_by_web_user":True,
