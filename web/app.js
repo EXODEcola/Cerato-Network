@@ -4,7 +4,20 @@
  * All privileged permission checks happen on the server, never in this file.
  */
 const app = document.getElementById('app');
-const state = { account: null, csrf: '', view: 'dashboard', status: null, accounts: [], updateInfo: null };
+
+/* URL-backed navigation: refresh, bookmarks and browser history retain the page.
+ * Never persist auth tokens, CSRF or privileged data in localStorage. */
+const VALID_VIEWS=new Set(['dashboard','routes','machines','updates','accounts','profile']);
+const RESTRICTED_VIEWS=new Set(['routes','updates','accounts']);
+function viewFromUrl(){
+  const value=window.location.hash.replace(/^#\/?/,'');
+  return VALID_VIEWS.has(value)?value:'dashboard';
+}
+const state = {
+  account:null, csrf:'', view:viewFromUrl(), status:null,
+  ipv4:null, ipv4Error:null, accounts:[], updateInfo:null,
+};
+
 
 function node(tag, className, textValue) {
   const el = document.createElement(tag);
@@ -194,21 +207,42 @@ function renderRecoveryCodes(codes) {
   shell.append(node('div','auth-brand','◈ CERATO NETWORK'),panel);
   app.append(shell);
 }
-function menuButton(text, view) {
-  const b = button(text, async () => {
-    state.view = view;
-    try {
-      if (view === 'accounts' && state.account.role !== 'user') {
-        const result=await api('/api/accounts');
-        state.accounts=result.accounts || [];
-      } else if (view === 'updates' && state.account.role !== 'user') {
-        state.updateInfo=await api('/api/updates');
-      } else if (view === 'dashboard' || view === 'machines') {
-        state.status=await api('/api/status');
-      }
-    } catch(error) { notify(error.message,true); }
-    renderPanel();
-  }, 'nav-item' + (state.view === view ? ' selected' : ''));
+async function refreshViewData(view){
+  if(view==='accounts' && state.account.role!=='user'){
+    const result=await api('/api/accounts');
+    state.accounts=result.accounts||[];
+  }
+  if(view==='updates' && state.account.role!=='user'){
+    state.updateInfo=await api('/api/updates');
+  }
+  if(view==='dashboard' || view==='machines'){
+    state.status=await api('/api/status');
+  }
+  if((view==='routes'||view==='dashboard') && state.account.role!=='user'){
+    state.ipv4Error=null;
+    try{
+      state.ipv4=await api('/api/ip/allocations');
+    }catch(error){
+      state.ipv4=null;
+      state.ipv4Error='État du routage temporairement indisponible.';
+    }
+  }
+}
+async function navigate(view,{changeUrl=true}={}){
+  if(!VALID_VIEWS.has(view))view='dashboard';
+  if(state.account?.role==='user'&&RESTRICTED_VIEWS.has(view))view='dashboard';
+  state.view=view;
+  if(changeUrl&&window.location.hash!=='#/'+view){
+    history.pushState(null,'','#/'+view);
+  }
+  try{await refreshViewData(view);}
+  catch(error){notify(error.message,true);}
+  renderPanel();
+}
+function menuButton(text,view){
+  const b=button(text,()=>navigate(view),
+    'nav-item'+(state.view===view?' selected':''));
+  b.setAttribute('aria-current',state.view===view?'page':'false');
   return b;
 }
 function card(title, value, subtitle) {
@@ -227,6 +261,22 @@ function valueOrUnknown(value) {
 }
 function dashboard(main) {
   const data = state.status || {};
+  const routes=state.ipv4;
+  if(state.account.role!=='user'){
+    const routedGrid=node('div','route-summary');
+    routedGrid.append(
+      card('IPv4 attribuées', routes?routes.allocated_count:'—',
+           'Attributions gérées par Cerato'),
+      card('Routages directs', routes?routes.routed_count:'—',
+           'IPv4 complètes sur WireGuard'),
+      card('IPv4 disponibles',routes?routes.available_count:'—',
+           'Adresses sans attribution'),
+      card('Publications de ports',routes?.nat_publications??'—',
+           'Affichage historique uniquement')
+    );
+    main.append(routedGrid);
+    if(state.ipv4Error)main.append(paragraph(state.ipv4Error,'cerato-warning'));
+  }
   const peers = data.peers || {};
   const machines = data.machines || Object.entries(peers).map(([name, peer]) => ({ name, ...peer }));
   const grid = node('div', 'metric-grid');
@@ -273,6 +323,65 @@ function machinesView(main, supplied) {
   }
   main.append(area);
 }
+function routesView(main){
+  const data=state.ipv4;
+  const head=node('div','section-intro');
+  head.append(node('div','eyebrow','RÉSEAU PUBLIC / ROUTAGE'),
+              node('h2','','Attributions IPv4'),
+              paragraph('Une IPv4 publique est routée intégralement vers une machine WireGuard. '+
+                'Il ne s’agit pas d’une redirection NAT par port.'));
+  main.append(head);
+  if(!data){
+    const empty=section('État indisponible','Les attributions ne sont pas inventées en cas de panne du contrôleur.');
+    empty.append(paragraph(state.ipv4Error||'Lecture des attributions indisponible.','cerato-warning'));
+    main.append(empty);
+    return;
+  }
+  const metrics=node('div','route-summary');
+  metrics.append(
+    card('IPv4 routées',data.routed_count,'Adresses publiques avec /32'),
+    card('IPv4 disponibles',data.available_count,'Réservées à une future affectation'),
+    card('Total des IPv4',data.total,'Pool déclaré chez l’hébergeur'),
+    card('Alertes',data.warnings,'Conflits éventuels à vérifier')
+  );
+  main.append(metrics);
+  const area=section('Routages actifs','Aucune publication NAT par port n’est requise.');
+  const rows=(data.entries||[]).filter(item=>item&&item.mode==='routed-wg');
+  const table=node('table','table');
+  const header=node('tr');
+  ['IPv4 publique','Machine','Acheminement','État'].forEach(label=>
+    header.append(node('th','',label)));
+  table.append(header);
+  for(const route of rows){
+    const tr=node('tr');
+    const status=route.state==='warning'?'Conflit à vérifier':'Attribuée';
+    [route.ip,route.peer||'Inconnue','Routage complet /32 · WireGuard',status]
+      .forEach(value=>tr.append(node('td','',value)));
+    table.append(tr);
+  }
+  if(rows.length)area.append(table);
+  else area.append(paragraph('Aucune IPv4 routée vers une machine.'));
+  main.append(area);
+  if(data.available_count){
+    const available=section('IPv4 sans attribution',
+      'Une affectation doit être approuvée avant toute modification des routes.');
+    const free=(data.entries||[]).filter(row=>row?.mode==='available');
+    const table2=node('table','table');
+    const row=node('tr');
+    ['Adresse','État'].forEach(label=>row.append(node('th','',label)));
+    table2.append(row);
+    free.forEach(item=>{
+      const tr=node('tr');
+      tr.append(node('td','',item.ip),node('td','','Disponible'));
+      table2.append(tr);
+    });
+    available.append(table2);
+    main.append(available);
+  }
+  main.append(paragraph('La gestion des accès TCP/UDP d’une IPv4 routée se fait '+
+    'dans le pare-feu du serveur destinataire.','hint'));
+}
+
 async function loadAccounts() {
   const result = await api('/api/accounts');
   state.accounts = result.accounts || [];
@@ -389,8 +498,13 @@ function renderPanel() {
   app.replaceChildren();
   const frame = node('div','layout');
   const sidebar = node('aside','sidebar');
-  sidebar.append(node('div','logo','◈  CERATO NETWORK'), node('div','nav-label','INFRASTRUCTURE'),
-    menuButton('Vue d’ensemble','dashboard'), menuButton('Machines & tunnels','machines'));
+  sidebar.append(node('div','logo','◈ CERATO NETWORK'),
+    node('div','nav-label','RÉSEAU'),
+    menuButton('Vue d’ensemble','dashboard'),
+    menuButton('Machines & tunnels','machines'));
+  if(state.account.role!=='user'){
+    sidebar.append(menuButton('Routage IPv4','routes'));
+  }
   if (state.account.role !== 'user') {
     sidebar.append(menuButton('Mises à jour','updates'),node('div','nav-label','ADMINISTRATION'),
                    menuButton('Comptes','accounts'));
@@ -409,24 +523,36 @@ function renderPanel() {
   },'button small'));
   const main = node('main','main');
   main.append(node('h1','page-title', {
-    dashboard:'Vue d’ensemble',machines:'Machines & tunnels',updates:'Mises à jour',
+    dashboard:'Vue d’ensemble',machines:'Machines & tunnels',
+    routes:'Routage IPv4',updates:'Mises à jour',
     accounts:'Comptes & permissions',profile:'Mes identifiants'}[state.view] || 'Cerato Network'));
   if(state.view === 'dashboard') dashboard(main);
   if(state.view === 'machines') machinesView(main);
+  if(state.view === 'routes' && state.account.role!=='user') routesView(main);
   if(state.view === 'updates') updatesView(main);
   if(state.view === 'accounts' && state.account.role !== 'user') accountsView(main);
   if(state.view === 'profile') profileView(main);
-  main.append(paragraph('Cerato Network — version de développement · Les modifications réseau sont désactivées.', 'disclaimer'));
+  main.append(paragraph('Cerato Network · Console réseau · Attribution des IPv4 en lecture seule.', 'disclaimer'));
   content.append(top,main);
   frame.append(sidebar,content);
   app.appendChild(frame);
 }
 async function showPanel() {
-  try {
-    state.status = await api('/api/status');
-  } catch (e) { state.status={dashboard_mode:'unavailable',peers:{}}; notify(e.message, true); }
+  const requested=viewFromUrl();
+  state.view=(state.account?.role==='user'&&RESTRICTED_VIEWS.has(requested))
+    ?'dashboard':requested;
+  try{await refreshViewData(state.view);}
+  catch(error){notify(error.message,true);}
   renderPanel();
 }
+window.addEventListener('popstate',()=>{
+  if(!state.account)return;
+  navigate(viewFromUrl(),{changeUrl:false});
+});
+window.addEventListener('hashchange',()=>{
+  if(!state.account)return;
+  navigate(viewFromUrl(),{changeUrl:false});
+});
 (async function initialize() {
   try {
     const me = await api('/api/auth/me');
