@@ -155,7 +155,7 @@ def wrap_legacy_handler(handler_class, store, *, allowed_origin: str):
         raise LiveBridgeError("Legacy class has no session hook")
     # A historical handler with an unreviewed HTTP method must not retain
     # an unwrapped route that could execute privileged operations.
-    for verb in ("PUT", "OPTIONS", "TRACE", "CONNECT"):
+    for verb in ("HEAD", "PUT", "OPTIONS", "TRACE", "CONNECT"):
         if callable(getattr(handler_class, "do_" + verb, None)):
             raise LiveBridgeError("Legacy HTTP verb not audited: " + verb)
     for verb in ("GET", "POST"):
