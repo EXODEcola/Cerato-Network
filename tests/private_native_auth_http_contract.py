@@ -43,7 +43,9 @@ def run():
     if any(storage.iterdir()):
         raise RuntimeError("Stockage du test non vierge")
     mark("module-import")
-    sys.path.insert(0,str(security))
+    import importlib
+    sys.path.insert(0,str(security.resolve()))
+    importlib.invalidate_caches()
     from auth_store import AuthStore, Forbidden, InvalidCredentials
     from mfa import code_for_counter
     from live_http_bridge import wrap_legacy_handler
