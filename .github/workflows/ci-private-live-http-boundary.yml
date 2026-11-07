@@ -1,0 +1,28 @@
+name: Cerato Network - Frontière HTTP legacy sans exécution
+on:
+  push:
+    branches: [feature/private-live-http-execution-boundary-audit]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Tests preflight et régression HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations security tests gateway network updates
+          python3 -m unittest tests.test_private_live_http_boundary -v
+          python3 -m unittest tests.test_native_auth_loopback_http -v
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node tests/test_native_auth_transport.cjs
+          node tests/test_frontend_navigation.cjs
