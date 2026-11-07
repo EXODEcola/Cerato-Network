@@ -16,6 +16,13 @@ class BetaReleaseRequestTests(unittest.TestCase):
         parsed=validate(OK)
         self.assertEqual(parsed["version"],"v0.1.1-beta.1")
         self.assertEqual(parsed["from_version"],"v0.1.0-beta.1")
+    def test_accepts_scoped_nat_readout_beta(self):
+        data={**OK,"version":"v0.1.2-beta.1",
+              "from_version":"v0.1.1-beta.1","release_kind":"nat-ui"}
+        accepted=validate(data)
+        self.assertEqual(accepted["release_kind"],"nat-ui")
+        self.assertEqual(accepted["from_version"],"v0.1.1-beta.1")
+
     def test_rejects_wrong_channel_or_content(self):
         for field,value in (("channel","stable"),("channel","dev"),
                             ("release_kind","full-backend"),
