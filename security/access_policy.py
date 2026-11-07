@@ -19,6 +19,7 @@ EXACT = {
     ("PATCH", "/api/auth/me"): "view",
     ("POST", "/api/auth/logout"): "view",
     ("GET", "/api/status"): "view",
+    ("GET", "/api/ip/allocations"): "view_sensitive",
     ("GET", "/api/session"): "view",
     ("GET", "/api/events"): "view_sensitive",
     ("GET", "/api/nft-preview"): "view_sensitive",
