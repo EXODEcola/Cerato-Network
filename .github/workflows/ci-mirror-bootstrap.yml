@@ -1,0 +1,31 @@
+name: Cerato Network - Validation bootstrap miroir IPv4
+
+on:
+  push:
+    branches: [feature/mirror-routed-update-bootstrap]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Verifier updater et miroir signe sans deploiement
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Test de compatibilite du bootstrap, sans ecriture systeme
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/upgrade-live-update-engine.sh
+          python3 -m compileall -q updates tools network tests integrations
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js

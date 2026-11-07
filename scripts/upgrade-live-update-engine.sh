@@ -12,7 +12,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET=/opt/cerato-network/updater
 WEB_SERVICE=cerato-network-web.service
 WRAPPER=/usr/local/sbin/cerato-updatectl
-RELS=(updates/live_controller.py integrations/patch_live_routed_ui.py network/routed_ui_status.py)
+# Upgrade the signed-release HTTPS mirror validator alongside the Web updater.
+# Otherwise GitHub has the beta but the OVH mirror refuses its routed-ui schema.
+RELS=(
+  updates/live_controller.py
+  integrations/patch_live_routed_ui.py
+  network/routed_ui_status.py
+  tools/stage_signed_static_release.py
+)
 [[ -f "$TARGET/updates/live_controller.py" && ! -L "$TARGET/updates/live_controller.py" ]] || {
   echo "Moteur de mises à jour initial non détecté" >&2; exit 1;
 }
@@ -38,6 +45,7 @@ for rel in "${RELS[@]}"; do
   fi
 done
 grep -q 'ROUTED_SCHEMA=' "$ROOT/updates/live_controller.py"
+grep -q 'ROUTED_SCHEMA=' "$ROOT/tools/stage_signed_static_release.py"
 grep -q 'def stage(' "$ROOT/integrations/patch_live_routed_ui.py"
 grep -q 'def summarize(' "$ROOT/network/routed_ui_status.py"
 "$WRAPPER" status | python3 -c 'import json,sys; assert "installed_version" in json.load(sys.stdin)'
@@ -65,11 +73,11 @@ rollback() {
   done
 }
 trap rollback ERR
-install -d -o root -g root -m 0755 "$TARGET/integrations" "$TARGET/network"
+install -d -o root -g root -m 0755 "$TARGET/integrations" "$TARGET/network" "$TARGET/tools"
 for rel in "${RELS[@]}"; do
   install -o root -g root -m 0644 "$ROOT/$rel" "$TARGET/$rel"
 done
 "$WRAPPER" status | python3 -c 'import json,sys; assert "installed_version" in json.load(sys.stdin)'
 trap - ERR
-echo "Moteur et patcher IPv4 approuvés installés ; aucun service redémarré."
+echo "Updater, patcher IPv4 et validateur du miroir signé approuvés installés ; aucun service redémarré."
 echo "Sauvegarde : $BACKUP"
