@@ -142,7 +142,12 @@
     const listing=element('div','cerato-account-list');
     (result.accounts||[]).forEach(acc=>{
       const item=element('div','cerato-account-row');
-      const description=element('span','',acc.email+' · '+(label[acc.role]||acc.role));
+      const detail=acc.role==='user'?'Lecture seule':
+        (acc.mfa_enabled?'MFA actif':'MFA à configurer');
+      const count=Number.isInteger(acc.active_sessions)?
+        ' · '+acc.active_sessions+' session(s) active(s)':'';
+      const description=element('span','',
+        acc.email+' · '+(label[acc.role]||acc.role)+' · '+detail+count);
       item.append(description);
       if(acc.role!=='owner' && acc.id!==state.account.id){
         item.append(button(acc.active?'Désactiver':'Réactiver',async()=>{
@@ -150,6 +155,16 @@
           await call('/api/accounts/'+acc.id,'PATCH',{active:!acc.active});
           await accounts();
         }));
+        if(acc.role==='admin'){
+          item.append(button('Réinitialiser MFA',async()=>{
+            if(!confirm('Réinitialiser la double authentification de '+acc.email+
+              ' ? Toutes les sessions de ce compte seront révoquées.'))return;
+            try{
+              await call('/api/accounts/'+acc.id,'PATCH',{reset_mfa:true});
+              await accounts();
+            }catch(err){errorMessage(panel,err);}
+          }));
+        }
       }
       listing.append(item);
     });
@@ -174,6 +189,39 @@
     },'primary');
     panel.append(add,button('Fermer',()=>document.getElementById(ROOT_ID)?.remove()));
   }
+  function myAccount(){
+    if(!state.account)return;
+    const panel=overlay('Mon compte','Modifier mes identifiants. La session sera révoquée après modification.');
+    panel.append(element('p','cerato-auth-subtitle',
+      state.account.email+' · '+(label[state.account.role]||state.account.role)));
+    const current=control('Mot de passe actuel','password',
+      'Mot de passe actuel','current-password');
+    const email=control('Nouvelle adresse e-mail (facultatif)','email',
+      'Laisser vide pour conserver','email');
+    email.input.required=false;
+    const password=control('Nouveau mot de passe (facultatif)','password',
+      '14 caractères minimum','new-password');
+    password.input.required=false;
+    panel.append(current.wrap,email.wrap,password.wrap);
+    const save=button('Enregistrer mes identifiants',async()=>{
+      if(!current.input.value)return;
+      if(!email.input.value.trim()&&!password.input.value){
+        errorMessage(panel,new Error('Indique une adresse e-mail ou un nouveau mot de passe.'));
+        return;
+      }
+      save.disabled=true;
+      try{
+        const body={current_password:current.input.value};
+        if(email.input.value.trim())body.email=email.input.value.trim();
+        if(password.input.value)body.new_password=password.input.value;
+        await call(endpoint+'me','PATCH',body);
+        state.account=null;state.csrf='';
+        location.reload();
+      }catch(err){errorMessage(panel,err);}
+      finally{save.disabled=false;}
+    },'primary');
+    panel.append(save,button('Fermer',()=>document.getElementById(ROOT_ID)?.remove()));
+  }
   function accessActions(){
     if(!state.account || state.active)return;
     const target=document.querySelector('.topbar,.top-bar,header.topbar')||document.querySelector('header');
@@ -182,6 +230,7 @@
     if(state.account.role!=='user')box.append(button('Comptes et accès',()=>{
       accounts().catch(err=>errorMessage(overlay('Erreur d’accès',''),err));
     }));
+    box.append(button('Mon compte',myAccount));
     box.append(button('Déconnexion',async()=>{
       try{await call(endpoint+'logout','POST',{});}
       finally{state.account=null;state.csrf='';location.reload();}
