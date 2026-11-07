@@ -24,8 +24,11 @@ from access_policy import authorize, required_permission
 sys.path.insert(0, str(ROOT / 'updates'))
 from catalog import configured_info
 from installer import stage as stage_signed_release, StageError
+sys.path.insert(0, str(ROOT / "network"))
+from routed_ui_status import summarize as summarize_routed_ipv4, RoutedUIError
 
 BIND = "127.0.0.1"
+IPCTL_STATUS = "/usr/local/sbin/cerato-ipctl"
 PORT = int(os.environ.get("CERATO_PORT", "8788"))
 ORIGIN = os.environ.get("CERATO_WEB_ORIGIN", "https://network.example.org").rstrip("/")
 DATABASE = Path(os.environ.get("CERATO_AUTH_DB", "/var/lib/cerato-network-auth/accounts.sqlite3"))
@@ -117,6 +120,22 @@ def status_payload():
     except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
         return {"dashboard_mode": "unavailable", "tunnel_active": False,
                 "peers": {}, "reason": "Mesures indisponibles"}
+
+
+def routed_allocations_payload():
+    """Read-only, validated assignment status. Never configure an IP or NAT."""
+    if os.environ.get("CERATO_DEV_AUTH_ONLY") == "1":
+        raise OSError("État IPv4 non connecté en environnement auth isolé")
+    if not Path(IPCTL_STATUS).is_file():
+        raise OSError("Contrôleur d'IPv4 indisponible")
+    p = subprocess.run(
+        ["sudo", "-n", IPCTL_STATUS, "status"],
+        capture_output=True, text=True, timeout=12, check=False,
+    )
+    if p.returncode or len(p.stdout) > 200_000:
+        raise OSError("Lecture des attributions IPv4 indisponible")
+    data = json.loads(p.stdout)
+    return summarize_routed_ipv4(data)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -244,6 +263,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/status":
                 raw = status_payload()
                 return self.json(200, raw if actor["role"] != "user" else viewer_projection(raw))
+            if path == "/api/ip/allocations":
+                try:
+                    return self.json(200, routed_allocations_payload())
+                except (OSError,ValueError,TypeError,subprocess.TimeoutExpired,
+                        RoutedUIError):
+                    return self.error(503, "État des attributions IPv4 indisponible.")
             if path == "/api/accounts":
                 return self.json(200, {"accounts": STORE.list_accounts(actor)})
             if path == "/api/updates":
