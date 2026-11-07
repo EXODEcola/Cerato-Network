@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -138,9 +139,11 @@ def analyze(backend:bytes,frontend:bytes,styles:bytes):
         methods={part.name for part in node.body if isinstance(part,ast.FunctionDef)}
         if {"do_GET","do_POST","check_session"}.issubset(methods):
             candidates.append((node,methods))
+    forbidden_verbs={"do_HEAD","do_PUT","do_OPTIONS","do_TRACE","do_CONNECT"}
     structurally_valid=(len(candidates)==1 and
         REQUIRED_METHODS.issubset(candidates[0][1]) and
-        not candidates[0][0].decorator_list)
+        not candidates[0][0].decorator_list and
+        not (forbidden_verbs & candidates[0][1]))
     strings={node.value for node in ast.walk(tree)
              if isinstance(node,ast.Constant) and isinstance(node.value,str)
              and API_RE.fullmatch(node.value)}
@@ -159,6 +162,8 @@ def analyze(backend:bytes,frontend:bytes,styles:bytes):
         "http_handler_single_and_unmodified":structurally_valid,
         "handler_candidate_count":len(candidates),
         "handler_decorator_count":backend_decorators,
+        "unreviewed_http_method_count":(
+            len(forbidden_verbs & candidates[0][1]) if candidates else 0),
         "netstate_function_present":any(isinstance(n,ast.FunctionDef)
                       and n.name=="netstate" for n in tree.body),
         "reviewed_api_route_count":len(strings & KNOWN_ROUTES),
@@ -168,6 +173,9 @@ def analyze(backend:bytes,frontend:bytes,styles:bytes):
         "routed_ipv4_api_present":"/api/ip/allocations" in strings,
         "routed_nat_guard_present":"cerato_reject_routed_nat(" in backend_text,
         "frontend":frontend_markers,
+        "legacy_fetch_transport_detected":bool(re.search(r"\\bfetch\\s*\\(",js)),
+        "legacy_xhr_transport_detected":"XMLHttpRequest" in js,
+        "legacy_js_csrf_header_present":"X-Cerato-CSRF" in js,
         "frontend_sections":sections,
         "native_auth_overlay_already_inserted":AUTH_MARKER in js,
         "signed_nat_readout_present":NAT_UI_MARKER in js,
@@ -178,6 +186,10 @@ def report(base:Path=BASE,systemd=systemd_status,proxy=proxy_status,
            account=account_storage):
     state=analyze(source(base/"backend/server.py"),
                   source(base/"web/app.js"),source(base/"web/style.css"))
+    state["runtime_dependencies"]={
+        "argon2_available":importlib.util.find_spec("argon2") is not None,
+        "cryptography_available":importlib.util.find_spec("cryptography") is not None,
+    }
     state["systemd"]=systemd()
     state["proxy"]=proxy()
     state["accounts_storage"]=account()
