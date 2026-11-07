@@ -28,6 +28,9 @@ from remote import _parse_version, CHANNELS
 BUNDLE="cerato-network-release.zip"
 EXPECTED_OVERLAY="cerato-network/live-overlay/"
 CSS_SCHEMA="cerato-network-legacy-web-css-v1"
+ROUTED_SCHEMA="cerato-network-legacy-routed-ui-patch-v1"
+ROUTED_FILES={EXPECTED_OVERLAY+"compat.json",EXPECTED_OVERLAY+"routed-ui.json"}
+ROUTED_FIELDS={"schema","backend_sha256","frontend_sha256","patch_sha256","model_sha256"}
 CSS_FILES={EXPECTED_OVERLAY+"compat.json",EXPECTED_OVERLAY+"web/style.append.css"}
 EXPECTED_FILES={
     EXPECTED_OVERLAY+"compat.json",
@@ -93,12 +96,15 @@ def validate(release_dir:Path,channel_dir:Path,public_key:Path,channel:str,
         css_only=found==CSS_FILES|{
             "cerato-network/LICENSE","cerato-network/README.md",
         }
-        if (not css_only and found!=permitted) or len(archive.infolist())!=len(found):
-            raise StagePublicationError("Seul un overlay graphique RISE-1 est publiable")
+        routed_only=found==ROUTED_FILES|{
+            "cerato-network/LICENSE","cerato-network/README.md",
+        }
+        if (not css_only and not routed_only and found!=permitted) or len(archive.infolist())!=len(found):
+            raise StagePublicationError("Archive incompatible avec le Web RISE-1")
             raise StagePublicationError("Seul un overlay graphique RISE-1 est publiable")
         spec=json.loads(archive.read(EXPECTED_OVERLAY+"compat.json"))
         if (not isinstance(spec,dict) or
-                spec.get("schema") not in ("cerato-network-legacy-web-visual-v1",CSS_SCHEMA) or
+                spec.get("schema") not in ("cerato-network-legacy-web-visual-v1",CSS_SCHEMA,ROUTED_SCHEMA) or
                 spec.get("target")!="cerato-network-web-8787" or
                 not isinstance(spec.get("from_versions"),list) or
                 not spec["from_versions"] or
@@ -111,6 +117,21 @@ def validate(release_dir:Path,channel_dir:Path,public_key:Path,channel:str,
             if (not css.startswith(b"/* CERATO-NETWORK-SIGNED-CSS-V1 */") or
                 len(css)>200_000 or b"@import" in css.lower() or b"url(" in css.lower()):
                 raise StagePublicationError("Correctif CSS non approuvé")
+        elif routed_only:
+            if spec["schema"]!=ROUTED_SCHEMA:
+                raise StagePublicationError("Schéma de l'accord IPv4 routée invalide")
+            blob=archive.read(EXPECTED_OVERLAY+"routed-ui.json")
+            if not 0<len(blob)<=4096:
+                raise StagePublicationError("Accord IPv4 routée de taille invalide")
+            meta=json.loads(blob)
+            if (not isinstance(meta,dict) or set(meta)!=ROUTED_FIELDS
+                    or meta.get("schema")!=ROUTED_SCHEMA):
+                raise StagePublicationError("Accord IPv4 routée invalide")
+            for key in ROUTED_FIELDS-{"schema"}:
+                digest=meta[key]
+                if (not isinstance(digest,str) or len(digest)!=64
+                        or any(c not in "0123456789abcdef" for c in digest)):
+                    raise StagePublicationError("Empreinte de l'accord IPv4 invalide")
         elif spec["schema"]!="cerato-network-legacy-web-visual-v1":
             raise StagePublicationError("Schéma visuel complet invalide")
         for source in spec["from_versions"]:

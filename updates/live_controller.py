@@ -50,6 +50,9 @@ VISUAL_FILES={"web/app.js","web/style.css"}
 CSS_PATCH_SCHEMA="cerato-network-legacy-web-css-v1"
 CSS_PATCH_FILES={"web/style.append.css"}
 CSS_PATCH_MARKER=b"/* CERATO-NETWORK-SIGNED-CSS-V1 */"
+ROUTED_SCHEMA="cerato-network-legacy-routed-ui-patch-v1"
+ROUTED_PATCH_FILES={"routed-ui.json"}
+ROUTED_TARGETS={"backend/server.py","web/app.js"}
 
 
 class UpdateError(RuntimeError):
@@ -137,13 +140,14 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             raise UpdateError("Release non compatible avec le panneau RISE-1 actuel")
         spec=json.loads(z.read(marker))
         if (not isinstance(spec,dict) or
-            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA,CSS_PATCH_SCHEMA) or
+            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA,CSS_PATCH_SCHEMA,ROUTED_SCHEMA) or
             spec.get("target")!="cerato-network-web-8787" or
             not isinstance(spec.get("from_versions"),list) or
             installed_version not in spec["from_versions"]):
             raise UpdateError("Migration de cette version non autorisée")
         required=(set(ALLOWED) if spec["schema"]==SCHEMA else
-                  CSS_PATCH_FILES if spec["schema"]==CSS_PATCH_SCHEMA else VISUAL_FILES)
+                  CSS_PATCH_FILES if spec["schema"]==CSS_PATCH_SCHEMA else
+                  ROUTED_PATCH_FILES if spec["schema"]==ROUTED_SCHEMA else VISUAL_FILES)
         # The only allowed update payloads are the known full legacy overlay or
         # a style+JS update. A visual refresh never redistributes server.py.
         found={name.removeprefix(OVERLAY) for name in z.namelist()
@@ -154,6 +158,8 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             info=z.getinfo(OVERLAY+name)
             if info.file_size<=0 or info.file_size>2_000_000:
                 raise UpdateError("Fichier de mise à jour hors limites")
+        if spec["schema"]==ROUTED_SCHEMA:
+            return _read_routed_patch(z,verify_only)
         if spec["schema"]==CSS_PATCH_SCHEMA:
             patch=z.read(OVERLAY+"web/style.append.css")
             if (not patch.startswith(CSS_PATCH_MARKER) or
@@ -173,6 +179,56 @@ def _read_overlay(bundle,installed_version,verify_only=False):
         return {name:z.read(OVERLAY+name) for name in sorted(required)}
 
 
+def _read_routed_patch(archive,verify_only):
+    """A signed approval for an already installed, root-owned patcher.
+
+    The release has no server sources or executable content. Refuse any
+    mismatch to the exact staged legacy Web source and trusted local tools.
+    """
+    import importlib.util
+    payload=archive.read(OVERLAY+"routed-ui.json")
+    if not 0<len(payload)<=4096:
+        raise UpdateError("Manifeste IPv4 vide ou trop volumineux")
+    info=json.loads(payload)
+    keys={"schema","backend_sha256","frontend_sha256",
+          "patch_sha256","model_sha256"}
+    if not isinstance(info,dict) or set(info)!=keys or info["schema"]!=ROUTED_SCHEMA:
+        raise UpdateError("Format du correctif IPv4 invalide")
+    for field in keys-{"schema"}:
+        digest=info[field]
+        if (not isinstance(digest,str) or len(digest)!=64 or
+                any(c not in "0123456789abcdef" for c in digest)):
+            raise UpdateError("Empreinte IPv4 invalide")
+    helper=ROOT/"integrations/patch_live_routed_ui.py"
+    model=ROOT/"network/routed_ui_status.py"
+    paths=((helper,"patch_sha256"),(model,"model_sha256"),
+           (ALLOWED["backend/server.py"],"backend_sha256"),
+           (ALLOWED["web/app.js"],"frontend_sha256"))
+    for path,key in paths:
+        if (path.is_symlink() or not path.is_file() or
+                not 0<path.stat().st_size<=300000 or
+                hashlib.sha256(path.read_bytes()).hexdigest()!=info[key]):
+            raise UpdateError("La source IPv4/Web a changé : installation refusée")
+    if helper.stat().st_uid!=0 or model.stat().st_uid!=0:
+        raise UpdateError("Patcher IPv4 non approuvé par root")
+    if verify_only:
+        return None
+    with tempfile.TemporaryDirectory(prefix="cerato-routed-signed-") as folder:
+        spec=importlib.util.spec_from_file_location("cerato_trusted_ui_patch",helper)
+        if spec is None or spec.loader is None:
+            raise UpdateError("Module de correctif IPv4 introuvable")
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        candidate=Path(folder)/"candidate"
+        report=module.stage(BASE,candidate,model)
+        if (report.get("status")!="staged-only"
+                or report.get("network_modified") is not False
+                or report.get("production_modified") is not False):
+            raise UpdateError("Staging du correctif IPv4 incohérent")
+        return {rel:(candidate/rel).read_bytes()
+                for rel in sorted(ROUTED_TARGETS)}
+
+
 def _snapshot():
     SNAPSHOTS.mkdir(parents=True,mode=0o700,exist_ok=True)
     name=time.strftime("%Y%m%dT%H%M%SZ",time.gmtime())+"-"+str(os.getpid())
@@ -188,7 +244,7 @@ def _snapshot():
 
 
 def _replace(files):
-    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES,{"web/style.css"}):
+    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES,{"web/style.css"},ROUTED_TARGETS):
         raise UpdateError("Liste de fichiers Web non autorisée")
     for rel in sorted(files):
         source=ALLOWED[rel]
@@ -204,6 +260,25 @@ def _replace(files):
             os.replace(path,source)
         finally:
             Path(path).unlink(missing_ok=True)
+
+
+def _controller_executable_ok(controller=Path("/usr/local/sbin/ceratoctl")):
+    """Reject Web upgrades when the root network CLI is not executable Python.
+
+    A broken direct entrypoint can leave the HTML Web process healthy while
+    every authenticated API call fails. Never change networking here.
+    """
+    if controller.is_symlink() or not controller.is_file():
+        return False
+    try:
+        with controller.open("rb") as stream:
+            first=stream.readline(120)
+        if not first.startswith(b"#!") or b"python" not in first.lower():
+            return False
+        response=_cmd(str(controller),"status",timeout=12)
+        return isinstance(json.loads(response),dict)
+    except (OSError,ValueError,UpdateError):
+        return False
 
 
 def _web_ok():
@@ -360,6 +435,8 @@ def apply():
             if not shutil.which("node"):
                 raise UpdateError("Node.js requis pour la validation du JavaScript")
             _cmd("node","--check",str(Path(folder)/"web/app.js"))
+    if not _controller_executable_ok():
+        raise UpdateError("Contrôleur réseau Cerato invalide : mise à jour Web refusée, réparer ceratoctl")
     if not _web_ok():
         raise UpdateError("Le panneau existant est déjà en défaut")
     previous_network=_network_fingerprint()
