@@ -1,0 +1,30 @@
+name: Cerato Network - Validation staging auth sur empreintes exactes
+
+on:
+  push:
+    branches: [fix/pin-live-auth-candidate-to-ovh-audit]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install -r security/requirements.txt
+      - name: Tests complets et simulation de la migration privee
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q scripts integrations security gateway network updates tests
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
+          node tests/test_native_auth_transport.cjs
+          node tests/test_frontend_navigation.cjs
