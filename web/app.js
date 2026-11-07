@@ -391,12 +391,19 @@ function accountsView(main) {
   const area = section('Comptes & permissions', 'Le propriétaire est protégé. Les co-administrateurs gèrent les autres comptes.');
   const table = node('table', 'table');
   const head = node('tr');
-  ['E-mail', 'Rôle', 'État', 'Actions'].forEach(v => head.appendChild(node('th', '', v)));
+  ['E-mail', 'Rôle', 'État', 'Double authentification', 'Sessions', 'Actions']
+    .forEach(v => head.appendChild(node('th', '', v)));
   table.appendChild(head);
   state.accounts.forEach(acc => {
     const tr = node('tr');
-    tr.append(node('td', '', acc.email), node('td', '', acc.role === 'owner' ? 'Propriétaire' : acc.role === 'admin' ? 'Administrateur' : 'Utilisateur'),
-              node('td', '', acc.active ? 'Actif' : 'Désactivé'));
+    tr.append(node('td', '', acc.email),
+              node('td', '', acc.role === 'owner' ? 'Propriétaire' :
+                acc.role === 'admin' ? 'Administrateur' : 'Utilisateur'),
+              node('td', '', acc.active ? 'Actif' : 'Désactivé'),
+              node('td', '', acc.role === 'user' ? 'Non requis' :
+                acc.mfa_enabled ? 'Activée' : 'À configurer'),
+              node('td', '', Number.isInteger(acc.active_sessions) ?
+                acc.active_sessions : '—'));
     const buttons = node('td');
     if (acc.role === 'owner') {
       buttons.appendChild(node('span', 'protected', 'Compte principal protégé'));
