@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$CHANNEL" == beta && "$RELEASE_KIND" == routed-ui ]]
+          [[ "$CHANNEL" == beta && ( "$RELEASE_KIND" == routed-ui || "$RELEASE_KIND" == nat-ui ) ]]
           [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[1-9][0-9]*$ ]]
           if gh release view "$VERSION" >/dev/null 2>&1; then
             echo "La release existe déjà : refus du nouveau déclenchement" >&2
@@ -54,5 +54,5 @@ jobs:
           fi
           gh workflow run publish-signed-release.yml --ref main \
             -f "version=$VERSION" -f "channel=beta" \
-            -f "release_kind=routed-ui" -f "from_version=$FROM_VERSION"
+            -f "release_kind=$RELEASE_KIND" -f "from_version=$FROM_VERSION"
           echo "Demande transmise au workflow de signature Ed25519 protégé."

@@ -1,0 +1,30 @@
+name: Cerato Network - Affichage routage IP et NAT
+
+on:
+  push:
+    branches: [feature/render-routed-ipv4-in-nat-panel]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Valider rendu IPv4 routée en lecture seule
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Suite de tests et JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q tools scripts tests integrations network updates
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js

@@ -30,7 +30,7 @@ def validate(item):
     if not isinstance(item,dict) or set(item)!=fields:
         raise BetaRequestError("Structure de la demande invalide")
     if (item["schema"]!="cerato-beta-publication-request-v1" or
-            item["channel"]!="beta" or item["release_kind"]!="routed-ui"):
+            item["channel"]!="beta" or item["release_kind"] not in ("routed-ui","nat-ui")):
         raise BetaRequestError("Canal ou contenu non approuvé")
     version=item["version"]
     baseline=item["from_version"]
@@ -39,7 +39,7 @@ def validate(item):
         raise BetaRequestError("Version bêta invalide")
     if _order(version)<=_order(baseline):
         raise BetaRequestError("Release non supérieure à la version installée")
-    return {"version":version,"channel":"beta","release_kind":"routed-ui",
+    return {"version":version,"channel":"beta","release_kind":item["release_kind"],
             "from_version":baseline}
 
 def main():

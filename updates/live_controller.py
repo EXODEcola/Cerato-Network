@@ -53,6 +53,16 @@ CSS_PATCH_MARKER=b"/* CERATO-NETWORK-SIGNED-CSS-V1 */"
 ROUTED_SCHEMA="cerato-network-legacy-routed-ui-patch-v1"
 ROUTED_PATCH_FILES={"routed-ui.json"}
 ROUTED_TARGETS={"backend/server.py","web/app.js"}
+NAT_UI_SCHEMA="cerato-network-legacy-routed-nat-readout-v1"
+NAT_UI_FILES={"web/routed-nat-panel.js"}
+NAT_UI_TARGETS={"web/app.js"}
+NAT_UI_MARKER=b"/* CERATO-NETWORK-ROUTED-NAT-UI-V1 */"
+NAT_UI_ANCHOR=b"function ceratoEnhanceIPv4(){"
+NAT_UI_OLD=(b"  if(screen==='nat'){\n    if(routed.size){")
+NAT_UI_NEW=(b"  if(screen==='nat'){\n"
+            b"    ceratoRenderDirectRoutedIPv4(base,data);\n"
+            b"    if(routed.size){")
+
 
 
 class UpdateError(RuntimeError):
@@ -140,14 +150,16 @@ def _read_overlay(bundle,installed_version,verify_only=False):
             raise UpdateError("Release non compatible avec le panneau RISE-1 actuel")
         spec=json.loads(z.read(marker))
         if (not isinstance(spec,dict) or
-            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA,CSS_PATCH_SCHEMA,ROUTED_SCHEMA) or
+            spec.get("schema") not in (SCHEMA,VISUAL_SCHEMA,CSS_PATCH_SCHEMA,
+                                       ROUTED_SCHEMA,NAT_UI_SCHEMA) or
             spec.get("target")!="cerato-network-web-8787" or
             not isinstance(spec.get("from_versions"),list) or
             installed_version not in spec["from_versions"]):
             raise UpdateError("Migration de cette version non autorisée")
         required=(set(ALLOWED) if spec["schema"]==SCHEMA else
                   CSS_PATCH_FILES if spec["schema"]==CSS_PATCH_SCHEMA else
-                  ROUTED_PATCH_FILES if spec["schema"]==ROUTED_SCHEMA else VISUAL_FILES)
+                  ROUTED_PATCH_FILES if spec["schema"]==ROUTED_SCHEMA else
+                  NAT_UI_FILES if spec["schema"]==NAT_UI_SCHEMA else VISUAL_FILES)
         # The only allowed update payloads are the known full legacy overlay or
         # a style+JS update. A visual refresh never redistributes server.py.
         found={name.removeprefix(OVERLAY) for name in z.namelist()
@@ -160,6 +172,8 @@ def _read_overlay(bundle,installed_version,verify_only=False):
                 raise UpdateError("Fichier de mise à jour hors limites")
         if spec["schema"]==ROUTED_SCHEMA:
             return _read_routed_patch(z,verify_only)
+        if spec["schema"]==NAT_UI_SCHEMA:
+            return _read_routed_nat_view(z,verify_only)
         if spec["schema"]==CSS_PATCH_SCHEMA:
             patch=z.read(OVERLAY+"web/style.append.css")
             if (not patch.startswith(CSS_PATCH_MARKER) or
@@ -229,6 +243,39 @@ def _read_routed_patch(archive,verify_only):
                 for rel in sorted(ROUTED_TARGETS)}
 
 
+def _read_routed_nat_view(archive,verify_only):
+    """Signed, UI-only augmentation of the ALREADY installed routed-IPv4 Web.
+
+    Deliberately preserves the old network backend and makes NO HTTP or
+    privileged network calls. Only approved source anchors may be modified.
+    """
+    target=ALLOWED["web/app.js"]
+    if target.is_symlink() or not target.is_file() or target.stat().st_uid!=0:
+        raise UpdateError("JavaScript du panneau non approuvé")
+    existing=target.read_bytes()
+    patch=archive.read(OVERLAY+"web/routed-nat-panel.js")
+    if (not NAT_UI_MARKER or not patch.startswith(NAT_UI_MARKER) or
+            not 0<len(patch)<=16000 or
+            patch.count(b"function ceratoRenderDirectRoutedIPv4(")!=1 or
+            b"innerHTML" in patch or
+            b"fetch(" in patch or b"eval(" in patch):
+        raise UpdateError("Correctif routage/NAT signé invalide")
+    if (NAT_UI_MARKER in existing or
+            existing.count(NAT_UI_ANCHOR)!=1 or
+            existing.count(NAT_UI_OLD)!=1 or
+            b"async function ceratoLoadIPv4Allocations()" not in existing or
+            b"cerato_reject_routed_nat(" in existing):
+        raise UpdateError("Vue Web IPv4 préalable non reconnue")
+    updated=existing.replace(NAT_UI_ANCHOR,patch.rstrip(b"\n")+b"\n"+
+                             NAT_UI_ANCHOR,1)
+    updated=updated.replace(NAT_UI_OLD,NAT_UI_NEW,1)
+    if len(updated)>300000:
+        raise UpdateError("Correctif JavaScript hors limites")
+    if verify_only:
+        return None
+    return {"web/app.js":updated}
+
+
 def _snapshot():
     SNAPSHOTS.mkdir(parents=True,mode=0o700,exist_ok=True)
     name=time.strftime("%Y%m%dT%H%M%SZ",time.gmtime())+"-"+str(os.getpid())
@@ -244,7 +291,7 @@ def _snapshot():
 
 
 def _replace(files):
-    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES,{"web/style.css"},ROUTED_TARGETS):
+    if not isinstance(files,dict) or set(files) not in (set(ALLOWED),VISUAL_FILES,{"web/style.css"},ROUTED_TARGETS,NAT_UI_TARGETS):
         raise UpdateError("Liste de fichiers Web non autorisée")
     for rel in sorted(files):
         source=ALLOWED[rel]
