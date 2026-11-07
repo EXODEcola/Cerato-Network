@@ -65,6 +65,8 @@ function notify(text, error = false) {
   if (!notice) { notice = node('div', 'notice'); document.body.appendChild(notice); }
   notice.textContent = text;
   notice.className = 'notice' + (error ? ' error' : '');
+  notice.setAttribute('role',error?'alert':'status');
+  notice.setAttribute('aria-live',error?'assertive':'polite');
 }
 async function api(path, method = 'GET', payload = null) {
   const opts = { method, credentials: 'same-origin', headers: { 'Accept': 'application/json' } };
@@ -505,6 +507,8 @@ function renderPanel() {
   app.replaceChildren();
   const frame = node('div','layout');
   const sidebar = node('aside','sidebar');
+  sidebar.setAttribute('role','navigation');
+  sidebar.setAttribute('aria-label','Navigation Cerato Network');
   sidebar.append(node('div','logo','◈ CERATO NETWORK'),
     node('div','nav-label','RÉSEAU'),
     menuButton('Vue d’ensemble','dashboard'),
