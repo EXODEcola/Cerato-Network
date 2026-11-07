@@ -1,0 +1,128 @@
+name: Cerato Network - Releases dev automatiques
+
+# Publish a new immutable GitHub development source snapshot on every
+# reviewed main push. These are intentionally UNSIGNED and NON-INSTALLABLE.
+# Signed beta releases remain a distinct protected workflow.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'release-requests/**'
+      - 'docs/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cerato-network-dev-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Valider les sources sans signer ni toucher OVH
+    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'EXODEcola/Cerato-Network' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Verifications Python/Node et tests complets
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          python3 -m compileall -q security gateway network updates tools tests integrations integration
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
+
+  publish:
+    name: Creer vX.Y.Z-dev.N sur GitHub seulement
+    needs: [validate]
+    if: ${{ needs.validate.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Calculer la version de developpement
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "EXODEcola/Cerato-Network" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          gh release list --limit 500 --json tagName,isDraft > "$RUNNER_TEMP/releases.json"
+          VERSION="$(python3 tools/next_dev_release.py --tags-json "$RUNNER_TEMP/releases.json")"
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[1-9][0-9]*$ ]]
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Le tag de développement existe déjà" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Preparer un apercu source NON INSTALLABLE
+        env:
+          DEV_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          OUT="$RUNNER_TEMP/dev-release"
+          mkdir -p "$OUT"
+          git archive --format=tar --prefix=cerato-network/ HEAD | gzip -n > "$OUT/cerato-network-source.tar.gz"
+          test "$(stat -c %s "$OUT/cerato-network-source.tar.gz")" -gt 100
+          python3 - "$OUT" "$DEV_VERSION" "$GITHUB_SHA" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          folder=Path(sys.argv[1])
+          blob=(folder/"cerato-network-source.tar.gz").read_bytes()
+          manifest={
+              "schema":"cerato-dev-source-v1",
+              "version":sys.argv[2],
+              "commit":sys.argv[3],
+              "artifact":"cerato-network-source.tar.gz",
+              "sha256":hashlib.sha256(blob).hexdigest(),
+              "signed":False,"installable":False,
+              "channel":"github-dev-preview",
+          }
+          (folder/"dev-manifest.json").write_text(
+              json.dumps(manifest,sort_keys=True,indent=2)+"\n",encoding="utf8")
+          PY
+          cat > "$OUT/RELEASE_NOTES.md" <<'EOF'
+          Version de développement Cerato Network.
+
+          - Snapshot de sources vérifié par les tests GitHub Actions.
+          - **Non signé et non installable dans Cerato Network sur OVH.**
+          - Aucun changement automatique sur les serveurs ni sur WireGuard.
+          - Les mises à jour Web installables passent par le canal bêta signé.
+          EOF
+      - name: Publier la release GitHub
+        env:
+          DEV_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/dev-release"
+          gh release create "$DEV_VERSION" \
+            "$OUT/cerato-network-source.tar.gz" \
+            "$OUT/dev-manifest.json" \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Cerato Network $DEV_VERSION" \
+            --notes-file "$OUT/RELEASE_NOTES.md"
+          gh release view "$DEV_VERSION" --json tagName,isPrerelease \
+            --jq 'select(.isPrerelease == true) | .tagName' | grep -Fx "$DEV_VERSION"
