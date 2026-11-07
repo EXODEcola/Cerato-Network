@@ -1,7 +1,7 @@
 {
   "schema": "cerato-beta-publication-request-v1",
-  "version": "v0.1.1-beta.1",
-  "from_version": "v0.1.0-beta.1",
+  "version": "v0.1.2-beta.1",
+  "from_version": "v0.1.1-beta.1",
   "channel": "beta",
-  "release_kind": "routed-ui"
+  "release_kind": "nat-ui"
 }
