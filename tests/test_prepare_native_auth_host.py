@@ -71,6 +71,7 @@ class NativeHostPrerequisitesTests(unittest.TestCase):
             with patch.object(m,"STORE",store),patch.object(m,"CONF",config), \
                  patch.object(m,"preflight",return_value=returns), \
                  patch.object(m,"unit_context",side_effect=properties), \
+                 patch.object(m,"trusted_systemd_dir",return_value=True), \
                  patch.object(m.pwd,"getpwnam",return_value=account), \
                  patch.object(m,"process",side_effect=calls):
                 outcome=m.install()
