@@ -1,0 +1,30 @@
+name: Cerato Network - Validation lecture IPv4 du service Web
+
+on:
+  push:
+    branches: [fix/live-ipctl-status-sudoers]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tests privilège minimal en lecture seule
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Tests et validation des sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q scripts integrations network tools updates tests
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
