@@ -1,0 +1,29 @@
+name: Cerato Network - Contrat HTTP complet de la passerelle native
+on:
+  push:
+    branches: [feature/native-auth-loopback-http-contract]
+permissions:
+  contents: read
+jobs:
+  auth-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dépendances des tests authentification
+        run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Vrai transport HTTP sur loopback et régression complète
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations security gateway network updates tests tools
+          python3 -m unittest tests.test_native_auth_loopback_http -v
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/live-auth-overlay.js
+          node tests/test_native_auth_transport.cjs
+          node tests/test_frontend_navigation.cjs
