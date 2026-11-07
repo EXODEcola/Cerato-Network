@@ -1,0 +1,33 @@
+name: Cerato Network - Contrats HTTP comptes natifs prives
+on:
+  push:
+    branches: [feature/native-auth-private-http-contract-tests]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dépendances cryptographiques approuvées
+        run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Contrat natif sans vrai réseau et suite de régression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations security gateway network updates tests tools
+          DB=$(mktemp -d)
+          trap 'rm -rf -- "$DB"' EXIT
+          chmod 0700 "$DB"
+          python3 -I tests/private_native_auth_http_contract.py security "$DB"
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
+          node tests/test_frontend_navigation.cjs
+          node tests/test_native_auth_transport.cjs
