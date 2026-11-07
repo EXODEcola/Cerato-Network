@@ -406,9 +406,24 @@ class AuthStore:
             raise Forbidden("Permission insuffisante.")
 
     def list_accounts(self, actor: dict) -> list[dict]:
+        """Expose only safe MFA and live-session COUNTS, never tokens or secrets."""
         self.require_permission(actor, "accounts_manage")
         with self._db() as db:
-            return [_public(row) for row in db.execute("SELECT id,email,role,active FROM accounts ORDER BY id")]
+            rows = db.execute(
+                """SELECT a.id,a.email,a.role,a.active,
+                          COALESCE(m.enabled,0) AS mfa_enabled,
+                          (SELECT COUNT(*) FROM sessions s
+                           WHERE s.account_id=a.id AND s.expires_at>?) AS active_sessions
+                   FROM accounts a LEFT JOIN mfa m ON m.account_id=a.id
+                   ORDER BY a.id""",
+                (int(time.time()),),
+            )
+            return [
+                {**_public(row),
+                 "mfa_enabled":bool(row["mfa_enabled"]),
+                 "active_sessions":int(row["active_sessions"])}
+                for row in rows
+            ]
 
     def create_account(self, actor: dict, email: str, password: str, role: str) -> dict:
         self.require_permission(actor, "accounts_manage")
