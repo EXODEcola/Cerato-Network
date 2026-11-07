@@ -29,6 +29,7 @@ ADMIN_READ={
     ("GET","/api/peers"),
     ("GET","/api/nat"),
     ("GET","/api/ip"),
+    ("GET","/api/ip/allocations"),
     ("GET","/api/firewall"),
     ("GET","/api/topology"),
     ("GET","/api/logs"),
