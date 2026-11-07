@@ -89,6 +89,40 @@ class PrivateRunnerTests(unittest.TestCase):
                 runner.run()
             self.assertEqual(mocks[8].call_count,1)
 
+    def test_error_metadata_is_strictly_sanitized(self):
+        private = "PRIVATE_PASSWORD_AND_MFA_SEED_DO_NOT_PRINT"
+        stderr = (
+            "Traceback: " + private + "\n"
+            "CERATO_TEST_STAGE=temporary-database\n"
+            "CERATO_TEST_ERROR=PermissionError\n"
+        )
+        self.assertEqual(
+            runner.error_phase("",stderr),
+            ("temporary-database","PermissionError"),
+        )
+        self.assertEqual(
+            runner.error_phase("", "CERATO_TEST_STAGE="+private+"\n"+
+                 "CERATO_TEST_ERROR=ConnectionError\n"),
+            ("unknown","unknown"),
+        )
+
+    def test_child_failure_returns_only_phase_and_type(self):
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            mocks=[stack.enter_context(x) for x in self._setup(exit_code=1)]
+            mocks[7].return_value.stderr=(
+                "private-secret-never-echo\n"
+                "CERATO_TEST_STAGE=owner-mfa\n"
+                "CERATO_TEST_ERROR=AssertionError\n"
+            )
+            with self.assertRaises(runner.SandboxError) as cm:
+                runner.run()
+            message=str(cm.exception)
+            self.assertIn("étape=owner-mfa",message)
+            self.assertIn("type=AssertionError",message)
+            self.assertNotIn("private-secret-never-echo",message)
+            self.assertEqual(mocks[8].call_count,1)
+
     def test_unusable_crypto_fails_before_privileged_work(self):
         with patch.object(runner.os,"geteuid",return_value=0), \
              patch.object(runner,"check_test_source"), \

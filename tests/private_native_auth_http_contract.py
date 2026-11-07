@@ -13,7 +13,15 @@ from pathlib import Path
 import sys
 import time
 
+# Emits ONLY an approved phase identifier and exception class on failure.
+# Never expose traceback values, database contents, passwords or MFA seeds.
+_STAGE = "startup"
+def mark(phase):
+    global _STAGE
+    _STAGE = phase
+
 def run():
+    mark("arguments")
     if len(sys.argv)!=3:
         raise RuntimeError("Arguments incomplets")
     security=Path(sys.argv[1])
@@ -22,13 +30,16 @@ def run():
         raise RuntimeError("Répertoires de test non approuvés")
     if any(storage.iterdir()):
         raise RuntimeError("Stockage du test non vierge")
+    mark("module-import")
     sys.path.insert(0,str(security))
     from auth_store import AuthStore, Forbidden, InvalidCredentials
     from mfa import code_for_counter
     from live_http_bridge import wrap_legacy_handler
 
+    mark("temporary-database")
     store=AuthStore(storage/"accounts.sqlite3")
     assert not store.is_initialized()
+    mark("bootstrap-owner")
     bootstrap=store.issue_bootstrap_token()
     owner=store.setup_owner(bootstrap,"owner@cerato.invalid","Test-Owner-Passphrase-98173!")
     assert owner["role"]=="owner"
@@ -99,6 +110,7 @@ def run():
             self.legacy_calls+=1
             return self.send_json(500,{"error":"legacy-delete-not-allowed"})
 
+    mark("bridge-attachment")
     wrap_legacy_handler(Handler,store,allowed_origin="https://51.210.223.57")
     calls=0
     def request(method,path,**kwargs):
@@ -109,9 +121,11 @@ def run():
         body=json.loads(handler.wfile.getvalue()) if handler.wfile.getvalue() else handler.data
         return handler, body
 
+    mark("legacy-session-denial")
     unauthorized,_=request("GET","/api/status",cookie="cerato_session=old-password")
     assert unauthorized.status==403 and unauthorized.legacy_calls==0
 
+    mark("owner-password")
     login,challenge=request("POST","/api/auth/login",payload={
         "email":"owner@cerato.invalid","password":"Test-Owner-Passphrase-98173!",
     })
@@ -119,6 +133,7 @@ def run():
     assert challenge["mfa_setup"] and "otp_secret" in challenge
     assert "Set-Cookie" not in login.reply_headers
 
+    mark("owner-mfa")
     totp=code_for_counter(challenge["otp_secret"],int(time.time())//30)
     finished,confirmed=request("POST","/api/auth/mfa/verify",payload={
         "challenge":challenge["challenge"],"code":totp,
@@ -131,10 +146,12 @@ def run():
     owner_cookie=finished.reply_headers["Set-Cookie"].split(";",1)[0]
     owner_csrf=confirmed["csrf"]
 
+    mark("owner-authorized-status")
     owner_status,owner_data=request("GET","/api/status",cookie=owner_cookie)
     assert owner_status.status==200 and owner_status.legacy_calls==1
     assert owner_data.get("private_key")=="TEST-DO-NOT-EXPOSE"
 
+    mark("origin-csrf")
     badcsrf,_=request("POST","/api/nat/add",cookie=owner_cookie,csrf="bad")
     assert badcsrf.status==403 and badcsrf.legacy_calls==0
     badorigin,_=request("POST","/api/nat/add",cookie=owner_cookie,
@@ -143,6 +160,7 @@ def run():
     allowed,_=request("POST","/api/nat/add",cookie=owner_cookie,csrf=owner_csrf)
     assert allowed.status==200 and allowed.legacy_calls==1
 
+    mark("create-secondary-accounts")
     created_admin,admin_data=request("POST","/api/accounts",
         cookie=owner_cookie,csrf=owner_csrf,payload={
             "email":"admin@cerato.invalid",
@@ -158,11 +176,13 @@ def run():
         })
     assert created_user.status==201 and user_data["account"]["role"]=="user"
 
+    mark("admin-password")
     admin_login,challenge2=request("POST","/api/auth/login",payload={
         "email":"admin@cerato.invalid","password":"Test-Admin-Passphrase-98173!",
     })
     assert admin_login.status==200 and challenge2["mfa_required"]
     assert "Set-Cookie" not in admin_login.reply_headers
+    mark("admin-mfa")
     code2=code_for_counter(challenge2["otp_secret"],int(time.time())//30)
     admin_done,admin_result=request("POST","/api/auth/mfa/verify",payload={
         "challenge":challenge2["challenge"],"code":code2,
@@ -171,10 +191,12 @@ def run():
     admin_cookie=admin_done.reply_headers["Set-Cookie"].split(";",1)[0]
     admin_csrf=admin_result["csrf"]
 
+    mark("owner-account-protection")
     account_protection,_=request("PATCH","/api/accounts/"+str(owner["id"]),
         cookie=admin_cookie,csrf=admin_csrf,payload={"active":False})
     assert account_protection.status==403 and account_protection.legacy_calls==0
 
+    mark("viewer-login")
     viewer_login,vinfo=request("POST","/api/auth/login",payload={
         "email":"viewer@cerato.invalid","password":"Test-Viewer-Passphrase-98173!",
     })
@@ -182,6 +204,7 @@ def run():
     assert "mfa_required" not in vinfo
     viewer_cookie=viewer_login.reply_headers["Set-Cookie"].split(";",1)[0]
     viewer_csrf=vinfo["csrf"]
+    mark("viewer-redaction")
     view,summary=request("GET","/api/status",cookie=viewer_cookie)
     assert view.status==200 and summary.get("tunnel_active") is True
     assert "private_key" not in summary and "ip" not in summary and "peers" not in summary
@@ -191,10 +214,12 @@ def run():
     viewer_accounts,_=request("GET","/api/accounts",cookie=viewer_cookie)
     assert viewer_accounts.status==403
 
+    mark("account-list")
     list_handler,account_list=request("GET","/api/accounts",cookie=owner_cookie)
     assert list_handler.status==200 and len(account_list["accounts"])==3
     assert all(set(row)=={"id","email","role","active","mfa_enabled",
                           "active_sessions"} for row in account_list["accounts"])
+    mark("legacy-login-rejection")
     legacy_login,_=request("POST","/api/login",payload={
         "password":"historical-placeholder",
     })
@@ -226,7 +251,14 @@ def run():
     }
     encoded=json.dumps(output,sort_keys=True)
     assert direct_secret not in encoded
+    mark("complete")
     print(encoded)
 
 if __name__=="__main__":
-    run()
+    try:
+        run()
+    except Exception as exc:
+        # Purely diagnostic metadata: never echo exception messages.
+        print("CERATO_TEST_STAGE="+_STAGE,file=sys.stderr)
+        print("CERATO_TEST_ERROR="+type(exc).__name__,file=sys.stderr)
+        sys.exit(1)

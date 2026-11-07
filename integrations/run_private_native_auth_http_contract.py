@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import stat
 import subprocess
@@ -31,6 +32,33 @@ WEB_USER="ceratonet"
 
 class SandboxError(ValueError):
     pass
+
+# Exact allowlist: no child traceback, secret, account, IP or arbitrary text
+# can be reflected from the untrusted subprocess output.
+DIAGNOSTIC_STAGES=frozenset((
+    "startup","arguments","module-import","temporary-database",
+    "bootstrap-owner","bridge-attachment","legacy-session-denial",
+    "owner-password","owner-mfa","owner-authorized-status",
+    "origin-csrf","create-secondary-accounts","admin-password",
+    "admin-mfa","owner-account-protection","viewer-login",
+    "viewer-redaction","account-list","legacy-login-rejection",
+    "complete",
+))
+DIAGNOSTIC_ERRORS=frozenset((
+    "AssertionError","PermissionError","FileNotFoundError","OSError",
+    "RuntimeError","ValueError","TypeError","ImportError",
+    "ModuleNotFoundError","OperationalError","IntegrityError",
+    "ProgrammingError","Forbidden","InvalidCredentials",
+    "AuthError","SecretBoxError",
+))
+def error_phase(stdout:str,stderr:str):
+    # Extract only metadata from our own child; NEVER display full stderr
+    # (which may include unrelated source text, credentials or paths).
+    found_phase=re.findall(r"(?m)^CERATO_TEST_STAGE=([a-z][a-z0-9-]{0,55})$",stderr[:16000])
+    found_type=re.findall(r"(?m)^CERATO_TEST_ERROR=([A-Za-z][A-Za-z0-9]{0,55})$",stderr[:16000])
+    phase=found_phase[-1] if found_phase and found_phase[-1] in DIAGNOSTIC_STAGES else "unknown"
+    error=found_type[-1] if found_type and found_type[-1] in DIAGNOSTIC_ERRORS else "unknown"
+    return phase,error
 
 def verified_candidate():
     trusted_staging_root(BACKUPS,owner=0)
@@ -104,7 +132,10 @@ def run():
         )
         if result.returncode:
             # Never forward potentially private tracebacks to the operator.
-            raise SandboxError("Tests HTTP/MFA isolés refusés, aucun compte actif modifié")
+            phase,error=error_phase(result.stdout,result.stderr)
+            raise SandboxError(
+                "Tests HTTP/MFA isolés refusés : étape="+phase+
+                ", type="+error+". Aucun compte actif modifié")
         try:
             payload=json.loads(result.stdout)
         except ValueError as exc:
