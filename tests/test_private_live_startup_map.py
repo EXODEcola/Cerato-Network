@@ -83,6 +83,28 @@ if __name__ != '__main__':
         with self.assertRaises(checker.ExecutionBoundaryError):
             checker.startup_profile(b"\xff")
 
+    def test_staged_candidate_auth_decorator_is_an_import_side_effect(self):
+        staged=b'''def _cerato_secure_handler(cls):
+    store = _CeratoAuthStore("/PRIVATE/DO_NOT_EXPOSE/mfa.db")
+    return cls
+@_cerato_secure_handler
+class Handler:
+    pass
+'''
+        details=checker.staged_candidate_import_profile(staged)
+        self.assertTrue(details["candidate_auth_handler_decorated_at_import"])
+        self.assertTrue(details["candidate_account_store_constructed_during_import"])
+        self.assertTrue(details["candidate_test_must_mask_actual_auth_storage"])
+        self.assertNotIn("mfa.db",json.dumps(details))
+        self.assertNotIn("PRIVATE",json.dumps(details))
+        with self.assertRaises(checker.ExecutionBoundaryError):
+            checker.staged_candidate_import_profile(staged.replace(
+                b"_CeratoAuthStore",b"OTHER"))
+        with self.assertRaises(checker.ExecutionBoundaryError):
+            checker.staged_candidate_import_profile(staged.replace(
+                b"@_cerato_secure_handler",b""))
+
+
     def test_own_preflight_must_recheck_active_private_hash(self):
         payload={"inactive_candidate_integrity_verified":True,
                  "cryptographic_runtime_validated_under_web_user":True,
