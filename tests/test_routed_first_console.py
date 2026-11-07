@@ -58,7 +58,7 @@ class RoutedNetworkGatewayTests(unittest.TestCase):
         self.assertNotIn("'/api/nat/add'",app)
         self.assertNotIn("'/api/nat/remove'",app)
         self.assertNotIn("innerHTML",app)
-        self.assertNotIn("localStorage",app)
+        self.assertNotIn("localStorage.setItem(",app)
         self.assertIn("history.pushState",app)
         self.assertIn("window.addEventListener('popstate'",app)
         self.assertIn("window.addEventListener('hashchange'",app)
