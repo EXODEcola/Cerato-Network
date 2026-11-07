@@ -161,6 +161,24 @@ class LiveHTTPBridgeTests(unittest.TestCase):
         self.assertEqual(allowed.calls,[("legacy-POST","/api/nat/add")])
         self.assertFalse(allowed.check_session(write=True))
 
+    def test_non_api_post_does_not_bypass_native_legacy_gate(self):
+        request=Handler("/internal/manage",method="POST",
+                        cookie=self.cookie(),csrf="ok-csrf",
+                        origin="https://panel.example.net")
+        self.dispatch(request,"POST")
+        self.assertEqual(request.status,404)
+        self.assertEqual(request.calls,[])
+        self.assertEqual(self.store.checked,[])
+
+    def test_unreviewed_http_methods_refuse_bridge_creation(self):
+        for method in ("do_HEAD","do_PUT","do_OPTIONS","do_TRACE","do_CONNECT"):
+            class Unreviewed(Handler):
+                pass
+            setattr(Unreviewed,method,lambda self:None)
+            with self.subTest(method=method),self.assertRaises(LiveBridgeError):
+                wrap_legacy_handler(Unreviewed,self.store,
+                                    allowed_origin="https://panel.example.net")
+
     def test_unauthorized_route_is_rejected_before_old_backend(self):
         request=Handler("/api/debug/secret",cookie=self.cookie())
         self.dispatch(request)

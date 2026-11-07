@@ -1,0 +1,32 @@
+name: Cerato Network - Auth cutover 8787 (preflight uniquement)
+
+on:
+  push:
+    branches: [feature/live-8787-native-auth-cutover-gates]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Verification du controle prive et des protections du backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install -r security/requirements.txt
+      - name: Validation syntaxe et tests complets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations scripts security gateway network updates tests
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node tests/test_frontend_navigation.cjs
+          node --check web/live-auth-overlay.js
+          node tests/test_native_auth_transport.cjs

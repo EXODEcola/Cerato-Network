@@ -7,12 +7,14 @@ tests and a same-origin integration review before production activation.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
 
 from check_live_auth_cutover import BASELINE, _load_json
 from inspect_live_auth_compat import inspect
+from live_navigation_overlay import apply as add_navigation, NavigationStageError
 
 ROOT=Path(__file__).resolve().parents[1]
 MARKER="/* CERATO_AUTH_OVERLAY_STAGING"
@@ -46,8 +48,13 @@ def stage(source_root:Path,destination:Path, *, baseline:Path=BASELINE)->dict:
     inventory=inspect(src/"backend/server.py",src/"web/app.js")
     if inventory["server_sha256"]!=base.get("server_sha256"):
         raise NativeAuthUIStageError("Empreinte backend incompatible avec RISE-1")
+    if inventory["frontend_sha256"]!=base.get("frontend_sha256"):
+        raise NativeAuthUIStageError("Empreinte de l'interface JavaScript non approuvée")
     app=_source(src/"web/app.js").decode("utf8")
     css=_source(src/"web/style.css").decode("utf8")
+    approved_css=base.get("style_sha256")
+    if approved_css is not None and hashlib.sha256(css.encode("utf8")).hexdigest()!=approved_css:
+        raise NativeAuthUIStageError("Empreinte CSS différente de la copie approuvée")
     if any(app.count(anchor)!=1 for anchor in REQUIRED_JS):
         raise NativeAuthUIStageError("Interfaces historiques inconnues : aucun patch")
     if STYLE_MARKER not in css or MARKER in app:
@@ -56,7 +63,7 @@ def stage(source_root:Path,destination:Path, *, baseline:Path=BASELINE)->dict:
     styles=_source(ROOT/"web/live-auth-overlay.css").decode("utf8")
     # Never insert a new script tag that could load arbitrary remote code.
     # The authorized code is appended to the audited existing JavaScript.
-    new_js=app.rstrip()+"\n\n"+MARKER+" */\n"+script+"\n"
+    new_js=add_navigation(app).rstrip()+"\n\n"+MARKER+" */\n"+script+"\n"
     new_css=css.rstrip()+"\n\n"+styles+"\n"
     if len(new_js.encode())>MAX_BYTES or len(new_css.encode())>MAX_BYTES:
         raise NativeAuthUIStageError("Patch UI trop volumineux")
