@@ -27,20 +27,27 @@ def run():
     user=pwd.getpwnam("nobody")
     sandbox=Path(tempfile.mkdtemp(prefix="cerato-ci-root-sandbox.",dir="/var/tmp"))
     try:
-        os.chown(sandbox,0,user.pw_gid)
-        os.chmod(sandbox,0o750)
+        # Deliberately give these public-source files a group OTHER than
+        # the service account: imports must not rely on Linux group mapping.
+        os.chown(sandbox,0,0)
+        os.chmod(sandbox,0o711)
         security=sandbox/"security"
-        security.mkdir(mode=0o750)
-        os.chown(security,0,user.pw_gid)
+        security.mkdir(mode=0o700)
+        os.chown(security,0,0)
+        os.chmod(security,0o711)
         script=sandbox/"run-contract.py"
         for p in SECURITY:
             target=security/p
             shutil.copyfile(ROOT/"security"/p,target)
-            os.chown(target,0,user.pw_gid)
-            os.chmod(target,0o640)
+            os.chown(target,0,0)
+            os.chmod(target,0o644)
         shutil.copyfile(ROOT/"tests/private_native_auth_http_contract.py",script)
         os.chown(script,0,user.pw_gid)
         os.chmod(script,0o640)
+        # Only the disposable test database is writable by the test identity.
+        assert (sandbox.stat().st_mode & 0o777)==0o711
+        assert (security.stat().st_mode & 0o777)==0o711
+        assert user.pw_gid!=0
         storage=sandbox/"test-only-db"
         storage.mkdir(mode=0o700)
         os.chown(storage,user.pw_uid,user.pw_gid)
