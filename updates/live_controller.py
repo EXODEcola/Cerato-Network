@@ -58,9 +58,9 @@ NAT_UI_FILES={"web/routed-nat-panel.js"}
 NAT_UI_TARGETS={"web/app.js"}
 NAT_UI_MARKER=b"/* CERATO-NETWORK-ROUTED-NAT-UI-V1 */"
 NAT_UI_ANCHOR=b"function ceratoEnhanceIPv4(){"
-NAT_UI_OLD=(b"  if(screen==='nat'){\\n    if(routed.size){")
-NAT_UI_NEW=(b"  if(screen==='nat'){\\n"
-            b"    ceratoRenderDirectRoutedIPv4(base,data);\\n"
+NAT_UI_OLD=(b"  if(screen==='nat'){\n    if(routed.size){")
+NAT_UI_NEW=(b"  if(screen==='nat'){\n"
+            b"    ceratoRenderDirectRoutedIPv4(base,data);\n"
             b"    if(routed.size){")
 
 
@@ -266,7 +266,7 @@ def _read_routed_nat_view(archive,verify_only):
             b"async function ceratoLoadIPv4Allocations()" not in existing or
             b"cerato_reject_routed_nat(" in existing):
         raise UpdateError("Vue Web IPv4 préalable non reconnue")
-    updated=existing.replace(NAT_UI_ANCHOR,patch.rstrip(b"\\n")+b"\\n"+
+    updated=existing.replace(NAT_UI_ANCHOR,patch.rstrip(b"\n")+b"\n"+
                              NAT_UI_ANCHOR,1)
     updated=updated.replace(NAT_UI_OLD,NAT_UI_NEW,1)
     if len(updated)>300000:
