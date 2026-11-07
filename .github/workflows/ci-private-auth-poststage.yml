@@ -1,0 +1,33 @@
+name: Cerato Network - Validation copie privee de connexion
+
+on:
+  push:
+    branches: [feature/verify-private-auth-candidate-poststage]
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: Integrite candidate prive et tests de securite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependances cryptographiques des tests
+        run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt
+      - name: Validation complete et scenarios negatifs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q integrations security gateway network updates tests tools scripts
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node tests/test_native_auth_transport.cjs
+          node tests/test_frontend_navigation.cjs
+          node --check web/live-auth-overlay.js
+          node --check web/app.js
