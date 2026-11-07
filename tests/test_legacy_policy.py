@@ -34,7 +34,7 @@ class LegacyPolicyTests(unittest.TestCase):
         self.assertEqual(allow("GET","/api/auth/me",VIEWER),"view")
         self.assertEqual(allow("PATCH","/api/auth/me",VIEWER),"view")
         for route in ("/api/peers","/api/nat","/api/ip","/api/wg-config",
-                      "/api/events","/api/updates"):
+                      "/api/events","/api/updates","/api/ip/allocations"):
             with self.subTest(route=route):
                 with self.assertRaises(Forbidden):
                     allow("GET",route,VIEWER)
