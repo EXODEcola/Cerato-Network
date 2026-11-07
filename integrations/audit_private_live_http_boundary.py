@@ -69,7 +69,9 @@ def parsed_policy(source:bytes)->set[tuple[str,str]]:
                     tuples=ast.literal_eval(node.value)
                 except (ValueError,TypeError,SyntaxError) as exc:
                     raise ExecutionBoundaryError("Politique RBAC non littérale") from exc
-                if (not isinstance(tuples,set) or
+                if (not isinstance(node.value,ast.Set) or
+                        len(node.value.elts)!=len(tuples) or
+                        not isinstance(tuples,set) or
                         any(not isinstance(row,tuple) or len(row)!=2 or
                             row[0] not in {"GET","POST","PATCH","DELETE"} or
                             not isinstance(row[1],str) or
