@@ -115,6 +115,13 @@ def private_storage_state():
         return True
     return False
 
+def trusted_systemd_dir(folder:Path)->bool:
+    if folder.is_symlink() or not folder.is_dir():
+        return False
+    st=folder.stat()
+    return st.st_uid==0 and not (st.st_mode & (stat.S_IWGRP|stat.S_IWOTH))
+
+
 def dropin_state():
     base=CONF.parent.parent
     if not base.is_dir() or base.is_symlink() or base.stat().st_uid!=0:
@@ -191,7 +198,7 @@ def install():
                                      owner_gid=user.pw_gid,permissions=0o700)
         if not state["systemd_dropin_present"]:
             CONF.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
-            if CONF.parent.is_symlink() or CONF.parent.stat().st_uid!=0:
+            if not trusted_systemd_dir(CONF.parent):
                 raise PrerequisiteError("Dossier systemd devenu non sûr")
             fd=os.open(CONF,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o644)
             made_dropin=True
