@@ -144,7 +144,7 @@ def analyze(backend:bytes,frontend:bytes,styles:bytes):
     strings={node.value for node in ast.walk(tree)
              if isinstance(node,ast.Constant) and isinstance(node.value,str)
              and API_RE.fullmatch(node.value)}
-    frontend={k:js.count(marker)==1 for k,marker in FRONTEND_MARKERS.items()}
+    frontend_markers={k:js.count(marker)==1 for k,marker in FRONTEND_MARKERS.items()}
     sections={name: bool(re.search(r"['\"]"+re.escape(name)+r"['\"]",js))
               for name in sorted(REQUIRED_SECTIONS)}
     backend_decorators=(
@@ -167,7 +167,7 @@ def analyze(backend:bytes,frontend:bytes,styles:bytes):
         "legacy_logout_route_present":"/api/logout" in strings,
         "routed_ipv4_api_present":"/api/ip/allocations" in strings,
         "routed_nat_guard_present":"cerato_reject_routed_nat(" in backend_text,
-        "frontend":frontend,
+        "frontend":frontend_markers,
         "frontend_sections":sections,
         "native_auth_overlay_already_inserted":AUTH_MARKER in js,
         "signed_nat_readout_present":NAT_UI_MARKER in js,
