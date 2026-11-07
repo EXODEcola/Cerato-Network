@@ -96,17 +96,17 @@ def check_test_source():
         raise SandboxError("Scénario de validation trop volumineux")
 
 def stage_sandbox(root:Path,candidate:Path,user):
-    # Only PUBLIC repo modules and this synthetic test script are copied here.
+    # Only PUBLIC repo modules and a synthetic test script are copied here.
     # Allow traverse of the two root-owned dirs without relying on OVH's
     # supplementary group mapping (the reported auth_store import failed).
-    # Mode 0711 prevents directory listing; NO write access is granted.
+    # Mode 0755 permits Python module-directory scanning but NO write access.
     # Real auth data remains solely in the user-owned 0700 test-only-db.
     os.chown(root,0,0)
-    os.chmod(root,0o711)
+    os.chmod(root,0o755)
     modules=root/"security"
     modules.mkdir(mode=0o700)
     os.chown(modules,0,0)
-    os.chmod(modules,0o711)
+    os.chmod(modules,0o755)
     files=[(candidate/"server/security"/name,modules/name)
            for name in SECURITY_MODULES]
     files.append((TEST,root/"run-contract.py"))
