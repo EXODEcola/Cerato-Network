@@ -34,6 +34,21 @@ function ceratoEnhanceIPv4(){
 })();
 """
 
+class TrustedRootPath:
+    """Mock only file ownership, not the updater's path/symlink checks."""
+    def __init__(self,path):
+        self.path=path
+    def is_symlink(self):
+        return self.path.is_symlink()
+    def is_file(self):
+        return self.path.is_file()
+    def stat(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(st_uid=0)
+    def read_bytes(self):
+        return self.path.read_bytes()
+
+
 class RoutedNatSignedReleaseTests(unittest.TestCase):
     def make_signed(self,folder):
         folder=Path(folder)
@@ -78,7 +93,7 @@ class RoutedNatSignedReleaseTests(unittest.TestCase):
             package,_,_=self.make_signed(d)
             original=Path(d)/"app.js"
             original.write_text(OLD_WEB)
-            with patch.dict(ctl.ALLOWED,{"web/app.js":original}):
+            with patch.dict(ctl.ALLOWED,{"web/app.js":TrustedRootPath(original)}):
                 self.assertIsNone(ctl._read_overlay(package,
                                   "v0.1.1-beta.1",verify_only=True))
                 result=ctl._read_overlay(package,"v0.1.1-beta.1")
@@ -100,7 +115,7 @@ class RoutedNatSignedReleaseTests(unittest.TestCase):
             package,_,_=self.make_signed(d)
             original=Path(d)/"app.js"
             original.write_text(OLD_WEB)
-            with patch.dict(ctl.ALLOWED,{"web/app.js":original}):
+            with patch.dict(ctl.ALLOWED,{"web/app.js":TrustedRootPath(original)}):
                 with self.assertRaises(ctl.UpdateError):
                     ctl._read_overlay(package,"v0.1.0-beta.1",verify_only=True)
                 changed=OLD_WEB.replace("function ceratoEnhanceIPv4(){",
