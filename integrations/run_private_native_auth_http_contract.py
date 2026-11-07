@@ -96,13 +96,17 @@ def check_test_source():
         raise SandboxError("Scénario de validation trop volumineux")
 
 def stage_sandbox(root:Path,candidate:Path,user):
-    # /var/tmp is sticky; all files under the random root are protected by
-    # root-owned 0750 directories and 0640 files.
-    os.chown(root,0,user.pw_gid)
-    os.chmod(root,0o750)
+    # Only PUBLIC repo modules and this synthetic test script are copied here.
+    # Allow traverse of the two root-owned dirs without relying on OVH's
+    # supplementary group mapping (the reported auth_store import failed).
+    # Mode 0711 prevents directory listing; NO write access is granted.
+    # Real auth data remains solely in the user-owned 0700 test-only-db.
+    os.chown(root,0,0)
+    os.chmod(root,0o711)
     modules=root/"security"
-    modules.mkdir(mode=0o750)
-    os.chown(modules,0,user.pw_gid)
+    modules.mkdir(mode=0o700)
+    os.chown(modules,0,0)
+    os.chmod(modules,0o711)
     files=[(candidate/"server/security"/name,modules/name)
            for name in SECURITY_MODULES]
     files.append((TEST,root/"run-contract.py"))
@@ -116,8 +120,12 @@ def stage_sandbox(root:Path,candidate:Path,user):
             if origin.read_bytes()!=repo_file.read_bytes():
                 raise SandboxError("Un module privé a changé depuis la vérification")
         shutil.copyfile(origin,target)
-        os.chown(target,0,user.pw_gid)
-        os.chmod(target,0o640)
+        # Contents are exact verified PUBLIC source files with fictitious
+        # credentials, never a production backend or real MFA database.
+        # Read-only world access here avoids relying on primary-group
+        # inheritance across runuser / PAM / host-specific group settings.
+        os.chown(target,0,0)
+        os.chmod(target,0o644)
     storage=root/"test-only-db"
     storage.mkdir(mode=0o700)
     os.chown(storage,user.pw_uid,user.pw_gid)
