@@ -86,6 +86,10 @@ class LiveHTTPBridge:
         method = method.upper()
         path = urlsplit(handler.path).path
         if not path.startswith("/api/"):
+            # Never allow an unreviewed legacy POST/PATCH/DELETE endpoint to
+            # bypass the native cookie/RBAC/CSRF layer through a non-API URL.
+            if method not in {"GET", "HEAD"}:
+                return _reply(handler, 404, {"error": "Route inconnue."})
             return legacy_method()
 
         # Do not trust proxy-provided host aliases for browser-facing auth.
@@ -149,6 +153,11 @@ def wrap_legacy_handler(handler_class, store, *, allowed_origin: str):
         raise LiveBridgeError("Bridge already installed")
     if not callable(getattr(handler_class, "check_session", None)):
         raise LiveBridgeError("Legacy class has no session hook")
+    # A historical handler with an unreviewed HTTP method must not retain
+    # an unwrapped route that could execute privileged operations.
+    for verb in ("PUT", "OPTIONS", "TRACE", "CONNECT"):
+        if callable(getattr(handler_class, "do_" + verb, None)):
+            raise LiveBridgeError("Legacy HTTP verb not audited: " + verb)
     for verb in ("GET", "POST"):
         name = "do_" + verb
         old = getattr(handler_class, name, None)
