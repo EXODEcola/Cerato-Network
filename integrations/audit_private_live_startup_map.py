@@ -11,8 +11,13 @@ import argparse
 import ast
 import json
 import os
+import subprocess
 from collections import Counter
 
+from verify_private_native_auth_stage import (
+    BACKUPS, TRUSTED_ROOT, check_one, trusted_staging_root,
+    VerificationError,
+)
 from audit_private_live_http_boundary import (
     LIVE, EXPECTED, ExecutionBoundaryError, inspect as boundary_inspect,
     safe_read, digest,
@@ -161,6 +166,51 @@ def startup_profile(source:bytes)->dict:
         "private_source_exported":False,
     }
 
+def staged_candidate_import_profile(source:bytes)->dict:
+    """No import: an auth decorator may initialize SQLite upon module load."""
+    try:
+        tree=ast.parse(source.decode("utf8"),filename="inactive-private-candidate.py")
+    except (SyntaxError,UnicodeError) as exc:
+        raise ExecutionBoundaryError("Candidat privé non analysable") from exc
+    classes=[node for node in tree.body if isinstance(node,ast.ClassDef)
+             and any(isinstance(d,ast.Name) and d.id=="_cerato_secure_handler"
+                     for d in node.decorator_list)]
+    factories=[node for node in tree.body
+               if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))
+               and node.name=="_cerato_secure_handler"]
+    if len(classes)!=1 or len(factories)!=1:
+        raise ExecutionBoundaryError("Décorateur du candidat non reconnu")
+    constructor=any(isinstance(n,ast.Call) and
+                    isinstance(n.func,ast.Name) and n.func.id=="_CeratoAuthStore"
+                    for n in ast.walk(factories[0]))
+    if not constructor:
+        raise ExecutionBoundaryError("Initialisation des comptes du candidat inconnue")
+    return {
+        "candidate_auth_handler_decorated_at_import":True,
+        "candidate_account_store_constructed_during_import":True,
+        "candidate_test_must_mask_actual_auth_storage":True,
+    }
+
+def candidate_import_profile():
+    """Verify and inspect the exact approved staged source, never execute it."""
+    trusted_staging_root(BACKUPS,owner=0)
+    approved=[]
+    for candidate in BACKUPS.glob("cerato-private-auth-candidate.*"):
+        try:
+            check_one(candidate,live=LIVE,repo=TRUSTED_ROOT,owner=0,pinned=EXPECTED)
+            approved.append(candidate)
+        except (VerificationError,ValueError,OSError,SyntaxError,
+                subprocess.TimeoutExpired):
+            continue
+    if not approved:
+        raise ExecutionBoundaryError("Aucun candidat privé actif et approuvé")
+    chosen=max(approved,key=lambda p:p.stat().st_mtime_ns)
+    check_one(chosen,live=LIVE,repo=TRUSTED_ROOT,owner=0,pinned=EXPECTED)
+    from verify_private_native_auth_stage import safe_read as read_private
+    source=read_private(chosen/"server/backend/server.py",owner=0,mode=0o600)
+    return staged_candidate_import_profile(source)
+
+
 def inspect():
     if os.geteuid()!=0:
         raise ExecutionBoundaryError("Contrôle réservé à root sur RISE-1")
@@ -170,10 +220,12 @@ def inspect():
     if digest(original)!=EXPECTED["server_sha256"]:
         raise ExecutionBoundaryError("Version privée active différente de l'audit")
     output=startup_profile(original)
+    candidate= candidate_import_profile()
     if output["suspected_external_call_sites"]!=previous["possible_external_or_socket_call_count"]:
         raise ExecutionBoundaryError("Analyse du nombre des appels incohérente")
     return {
         **output,
+        **candidate,
         "sha256_verified":True,
         "inactive_candidate_verified":previous["inactive_candidate_integrity_verified"],
         "runtime_verified":previous["cryptographic_runtime_validated_under_web_user"],
@@ -187,7 +239,7 @@ def main():
     parser.parse_args()
     try:
         print(json.dumps(inspect(),ensure_ascii=False,sort_keys=True,indent=2))
-    except (ExecutionBoundaryError,OSError,ValueError) as exc:
+    except (ExecutionBoundaryError,OSError,ValueError,subprocess.TimeoutExpired) as exc:
         parser.error(str(exc))
 
 if __name__=="__main__":
