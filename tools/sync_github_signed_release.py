@@ -21,7 +21,7 @@ sys.path.insert(0,str(ROOT/"tools"))
 sys.path.insert(0,str(ROOT/"updates"))
 
 from publish_signed_release import publish, _trusted, PUBLIC_ROOT, TRUST_CONFIG
-from remote import _parse_version, CHANNELS
+from remote import _parse_version, CHANNELS, DistributionError
 
 REPO="EXODEcola/Cerato-Network"
 RELEASES_API="https://api.github.com/repos/"+REPO+"/releases?per_page=20"
@@ -75,13 +75,18 @@ def discover(channel,*,get=_get):
                 release.get("prerelease")!=(channel=="beta")):
             continue
         version=release.get("tag_name")
-        try:
-            rank=_parse_version(version)
-        except (ValueError,TypeError):
+        # Public development previews intentionally use -dev.N and are not
+        # installable OVH releases. Filter by channel BEFORE parsing the
+        # signed-updater's narrower stable/beta version grammar.
+        if not isinstance(version,str):
             continue
         if channel=="beta" and "-beta." not in version:
             continue
         if channel=="stable" and "-" in version:
+            continue
+        try:
+            rank=_parse_version(version)
+        except (ValueError,TypeError,DistributionError):
             continue
         assets=release.get("assets")
         if not isinstance(assets,list):
