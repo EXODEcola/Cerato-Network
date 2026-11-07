@@ -1,0 +1,42 @@
+name: Cerato Network - Validation automatisation releases
+
+on:
+  push:
+    branches: [feature/automatic-dev-releases]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Tests releases dev et demandes beta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer les dependances de test
+        run: python3 -m pip install --disable-pip-version-check -r security/requirements.txt pyyaml
+      - name: Verifier YAML sans secrets ni publication
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          for p in (Path(".github/workflows/publish-dev-release.yml"),
+                    Path(".github/workflows/request-signed-beta.yml")):
+              with p.open(encoding="utf8") as f:
+                  data=yaml.safe_load(f)
+              assert isinstance(data,dict) and "jobs" in data
+          PY
+      - name: Tous les tests Python et syntaxe JS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q security gateway network updates tools tests integrations integration
+          python3 -m unittest discover -s tests -p 'test_*.py' -q
+          node --check web/app.js
+          node --check web/live-auth-overlay.js
